@@ -1,0 +1,9 @@
+{
+  "name": "tandem_core",
+  "version": "0.1.0",
+  "description": "Portable, hardware- and transport-independent core logic for T.A.N.D.E.M.",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  }
+}
