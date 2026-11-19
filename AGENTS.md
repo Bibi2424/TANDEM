@@ -54,6 +54,7 @@
   - ESP32-WROOM bring-up (`esp32dev`): `pio run -e esp32_wroom_bringup`
   - ESP32-S2 bring-up (`esp32-s2-saola-1` placeholder): `pio run -e esp32_s2_bringup`
   - All default firmware targets: `pio run`
+- **CI:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` and `pio run` on pushes to `main` and pull requests.
 
 ---
 

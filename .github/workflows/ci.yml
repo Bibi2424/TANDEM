@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-tests:
+    name: Native Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO & pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: ${{ runner.os }}-pio-native-${{ hashFiles('platformio.ini', 'lib/**/library.json') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-native-
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade pip platformio
+
+      - name: Run native unit tests
+        run: pio test -e native -v
+
+  firmware-builds:
+    name: Firmware Builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO & pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: ${{ runner.os }}-pio-fw-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-fw-
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade pip platformio
+
+      - name: Build default firmware environments
+        run: pio run
