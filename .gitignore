@@ -1,0 +1,28 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.clangd
+compile_commands.json
+
+# Arduino / C / C++ build output
+build/
+*.o
+*.elf
+*.bin
+*.map
+
+# Editor / IDE
+.vscode/*
+!.vscode/extensions.json
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets / credentials
+.env
+*.key
+*.pem
