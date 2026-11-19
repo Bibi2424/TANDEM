@@ -81,9 +81,15 @@
 
 ---
 
-## Git & Documentation Conventions
+## Git, Issues & Workflow Conventions
 
+- **Issue hierarchy:** Track work in GitHub Issues (`Bibi2424/TANDEM`) using native **Feature** issues as top-level parents, broken into PR-sized **Task** sub-issues only when ready to implement them (and **Bug** issues for defects).
+- **Assignment:** Assign active issues (tasks being worked on, and their parent feature when active) to `Bibi2424` when starting work on them.
 - **Branching:** Do not work or commit directly on `main`; create a topic branch (e.g., `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`) for all new changes.
-- **Commits:** Use Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`), matching existing repo history.
+- **Commits:** Use Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`) and reference relevant issue numbers (e.g., `(#9)`), matching existing repo history.
+- **Pull Requests & closing issues:**
+  - Open PRs against `main` for review and CI verification; do not merge PRs unless explicitly requested.
+  - Use `Closes #<N>` for the specific **Task** or **Bug** issues completed by the PR.
+  - Use `Part of #<N>` for ongoing umbrella **Feature** issues (such as DevOps `#8`) — only close a parent **Feature** when its full planned scope is actually complete.
 - **Keep repo clean:** Never commit build outputs (`.pio/`, `build/`, `*.bin`, `*.elf`), IDE clutter, or secrets/credentials (`.env`, `*.key`, `*.pem`).
 - **Sync docs with code:** Update `docs/`, protocol/schema specs, and this `AGENTS.md` whenever layouts, contracts, pinouts, or build commands change.
