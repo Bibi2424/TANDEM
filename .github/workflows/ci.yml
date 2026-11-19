@@ -65,8 +65,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pio-fw-
 
+      - name: Cache PlatformIO build objects
+        uses: actions/cache@v4
+        with:
+          path: ~/.pio-build-cache
+          key: ${{ runner.os }}-pio-build-cache-${{ hashFiles('platformio.ini') }}
+
       - name: Install PlatformIO
         run: python -m pip install --upgrade pip platformio
 
       - name: Build default firmware environments
-        run: pio run
+        run: |
+          mkdir -p "$HOME/.pio-build-cache"
+          PLATFORMIO_BUILD_CACHE_DIR="$HOME/.pio-build-cache" pio run
