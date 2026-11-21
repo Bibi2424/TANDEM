@@ -49,13 +49,13 @@
   - `lib/tandem_hal/` — MCU/board-isolated ADC1 and GPIO input scanner adapter (`espressif32`-scoped) sampling raw axes, debounced buttons, and optional 4-way hat into `tandem::RawStickInput`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (`input_diag`, `usb_hid`, `ble_hid`, `espnow_tx`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
-  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`).
+  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
   - Input diagnostics (board bring-up, ADC1 jitter & debounced GPIO; `esp32dev` / `lolin_s2_mini` — on S2 Mini, if USB CDC isn't active yet, enter ROM bootloader via `BOOT`/`GPIO0` + `RST`): `pio run -e esp32_wroom_input_diag`, `pio run -e esp32_s2_input_diag`
   - Wired USB HID prototype (composite USB CDC + 1000 Hz USB HID Joystick): `pio run -e esp32_s2_usb_hid`
   - Direct BLE HID prototype (Mode A, HOGP 100 Hz BLE HID Joystick, `ESP32-WROOM` with synthetic test mode): `pio run -e esp32_wroom_ble_hid`
-  - Mode B ESP-NOW stick TX (`ESP32-WROOM`, live + synthetic toggle) & USB Base Station (`ESP32-S2`, Dual USB HID + failsafe): `pio run -e esp32_wroom_espnow_tx` (Left) / `esp32_wroom_espnow_tx_right` (Right), `pio run -e esp32_s2_base_station`
+  - Mode B ESP-NOW stick TX (`ESP32-WROOM`, live + synthetic toggle) & USB Base Station (`ESP32-S2`, Dual or Combined USB HID + failsafe): `pio run -e esp32_wroom_espnow_tx` (Left) / `esp32_wroom_espnow_tx_right` (Right), `pio run -e esp32_s2_base_station` (Dual) / `esp32_s2_base_station_combined` (Combined)
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
 - **CI:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` and `pio run` on pushes to `main` and pull requests.
@@ -88,7 +88,7 @@
 
 ## Git, Issues & Workflow Conventions
 
-- **Human-controlled workflow phases:** Transitions between workflow phases are human-controlled. AI agents **must ask permission before committing, pushing, or opening a PR**.
+- **Human-controlled workflow phases (HARD GATE):** Transitions between workflow phases are strictly human-controlled. AI agents **MUST STOP and ask explicit permission before committing, pushing, or opening a PR** — **after** the final edits and verification checks are complete. Never infer permission to commit, push, or open a PR from an earlier approval (e.g., "do the code change" or an earlier "you can open a PR" prior to additional edits).
 - **Issue hierarchy:** Track work in GitHub Issues (`Bibi2424/TANDEM`) using native **Feature** issues as top-level parents, broken into PR-sized **Task** sub-issues only when ready to implement them (and **Bug** issues for defects).
 - **Assignment:** Assign active issues (tasks being worked on, and their parent feature when active) to `Bibi2424` when starting work on them.
 - **Branching:** Do not work or commit directly on `main`; create a topic branch (e.g., `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`) for all new changes.

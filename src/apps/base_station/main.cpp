@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <USB.h>
-#include <USBHID.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -10,9 +9,11 @@
 #include <cstring>
 
 #include "boards/board_config.h"
+#include "esp32-hal-tinyusb.h"
 #include "tandem/espnow_packet.h"
 #include "tandem/failsafe.h"
 #include "tandem/hid_report.h"
+#include "tandem/stick_combiner.h"
 #include "tandem/types.h"
 
 static_assert(tandem::board::kHasNativeUsb, "base_station requires native USB support");
@@ -30,8 +31,13 @@ static_assert(tandem::kHidJoystickReportDescriptor[6] == 0x85U &&
 #define TANDEM_FAILSAFE_TIMEOUT_MS 200
 #endif
 
+#ifndef TANDEM_BASE_COMBINED_MODE
+#define TANDEM_BASE_COMBINED_MODE 0
+#endif
+
 namespace {
 
+constexpr bool kCombinedMode = (TANDEM_BASE_COMBINED_MODE != 0);
 constexpr uint8_t kEspNowChannel = static_cast<uint8_t>(TANDEM_ESPNOW_CHANNEL);
 constexpr uint32_t kFailsafeTimeoutMs =
     static_cast<uint32_t>(TANDEM_FAILSAFE_TIMEOUT_MS);
@@ -41,56 +47,40 @@ constexpr uint32_t kLedConnectedIntervalMs = 250;
 constexpr uint32_t kLedIdleIntervalMs = 1000;
 constexpr uint32_t kUsbSerialWaitMs = 1500;
 
+constexpr uint16_t kUsbVid = 0x303AU;
+constexpr uint16_t kUsbPid = kCombinedMode ? 0x80C5U : 0x80C4U;
+constexpr const char* kHidInterfaceName =
+    kCombinedMode ? "TANDEM Combined Stick" : "TANDEM Base Station";
+
 constexpr uint8_t kReportIdLeft = 1;
 constexpr uint8_t kReportIdRight = 2;
-constexpr size_t kDualReportDescriptorBytes =
-    tandem::kHidJoystickReportDescriptorBytes * 2U;
+constexpr size_t kReportDescriptorBytes =
+    kCombinedMode ? tandem::kHidJoystickReportDescriptorBytes
+                  : (tandem::kHidJoystickReportDescriptorBytes * 2U);
 
-uint8_t g_dual_report_descriptor[kDualReportDescriptorBytes]{};
+uint8_t g_report_descriptor[kReportDescriptorBytes]{};
 
-void init_dual_report_descriptor() noexcept {
-  std::memcpy(g_dual_report_descriptor,
+void init_report_descriptor() noexcept {
+  std::memcpy(g_report_descriptor,
               tandem::kHidJoystickReportDescriptor,
               tandem::kHidJoystickReportDescriptorBytes);
-  std::memcpy(&g_dual_report_descriptor[tandem::kHidJoystickReportDescriptorBytes],
-              tandem::kHidJoystickReportDescriptor,
-              tandem::kHidJoystickReportDescriptorBytes);
-  g_dual_report_descriptor[7] = kReportIdLeft;
-  g_dual_report_descriptor[tandem::kHidJoystickReportDescriptorBytes + 7] =
-      kReportIdRight;
+  g_report_descriptor[7] = kReportIdLeft;
+  if constexpr (!kCombinedMode) {
+    std::memcpy(&g_report_descriptor[tandem::kHidJoystickReportDescriptorBytes],
+                tandem::kHidJoystickReportDescriptor,
+                tandem::kHidJoystickReportDescriptorBytes);
+    g_report_descriptor[tandem::kHidJoystickReportDescriptorBytes + 7] =
+        kReportIdRight;
+  }
 }
 
-class TandemDualUsbJoystick final : public USBHIDDevice {
- public:
-  TandemDualUsbJoystick() {
-    init_dual_report_descriptor();
-    static bool registered = false;
-    if (!registered) {
-      registered = true;
-      USBHID::addDevice(this, static_cast<uint16_t>(kDualReportDescriptorBytes));
-    }
+bool send_hid_report(uint8_t report_id, const tandem::StickState& state) noexcept {
+  if (!tud_hid_n_ready(0)) {
+    return false;
   }
-
-  void begin() { hid_.begin(); }
-
-  bool ready() { return hid_.ready(); }
-
-  bool send(uint8_t report_id, const tandem::StickState& state) {
-    if (!hid_.ready()) {
-      return false;
-    }
-    const tandem::HidJoystickReport report = tandem::encode_hid_joystick_report(state);
-    return hid_.SendReport(report_id, report.bytes, sizeof(report.bytes), 10);
-  }
-
-  uint16_t _onGetDescriptor(uint8_t* buffer) override {
-    std::memcpy(buffer, g_dual_report_descriptor, kDualReportDescriptorBytes);
-    return static_cast<uint16_t>(kDualReportDescriptorBytes);
-  }
-
- private:
-  USBHID hid_{};
-};
+  const tandem::HidJoystickReport report = tandem::encode_hid_joystick_report(state);
+  return tud_hid_n_report(0, report_id, report.bytes, static_cast<uint16_t>(sizeof(report.bytes)));
+}
 
 struct RxStickSnapshot {
   tandem::StickState state{tandem::make_centered_state(tandem::kStateFlagFailsafe)};
@@ -134,8 +124,8 @@ void on_espnow_recv(const esp_now_recv_info_t* esp_now_info,
   portEXIT_CRITICAL(&g_rx_mux);
 }
 
-TandemDualUsbJoystick g_dual_joystick;
 tandem::FailsafeMonitor g_monitors[2]{};
+tandem::StickCombineConfig g_combine_config = tandem::make_default_combine_config();
 
 uint32_t g_last_usb_us = 0;
 uint32_t g_last_status_ms = 0;
@@ -171,6 +161,68 @@ bool setup_espnow_rx() {
 
 }  // namespace
 
+extern "C" uint16_t tandem_hid_load_descriptor(uint8_t* dst, uint8_t* itf) {
+  static bool initialized = false;
+  if (initialized) {
+    return 0;
+  }
+  initialized = true;
+
+  const uint8_t str_index = tinyusb_add_string_descriptor(kHidInterfaceName);
+  const uint8_t ep_in = tinyusb_get_free_in_endpoint();
+  const uint8_t ep_out = tinyusb_get_free_out_endpoint();
+  if (ep_in == 0 || ep_out == 0) {
+    return 0;
+  }
+
+  const uint8_t descriptor[TUD_HID_INOUT_DESC_LEN] = {
+      TUD_HID_INOUT_DESCRIPTOR(*itf,
+                               str_index,
+                               HID_ITF_PROTOCOL_NONE,
+                               static_cast<uint16_t>(kReportDescriptorBytes),
+                               ep_out,
+                               static_cast<uint8_t>(0x80U | ep_in),
+                               CFG_TUD_ENDPOINT_SIZE,
+                               1)};
+  *itf += 1;
+  std::memcpy(dst, descriptor, TUD_HID_INOUT_DESC_LEN);
+  return TUD_HID_INOUT_DESC_LEN;
+}
+
+extern "C" uint8_t const* tud_hid_descriptor_report_cb(uint8_t) {
+  return g_report_descriptor;
+}
+
+extern "C" uint16_t tud_hid_get_report_cb(uint8_t,
+                                          uint8_t,
+                                          hid_report_type_t,
+                                          uint8_t*,
+                                          uint16_t) {
+  return 0;
+}
+
+extern "C" void tud_hid_set_report_cb(uint8_t,
+                                      uint8_t,
+                                      hid_report_type_t,
+                                      uint8_t const*,
+                                      uint16_t) {}
+
+namespace {
+
+// Must register the TinyUSB HID interface before initArduino() starts USB CDC
+// when ARDUINO_USB_CDC_ON_BOOT=1.
+struct TandemHidRegistrar {
+  TandemHidRegistrar() {
+    init_report_descriptor();
+    tinyusb_enable_interface2(
+        USB_INTERFACE_HID, TUD_HID_INOUT_DESC_LEN, tandem_hid_load_descriptor, false);
+  }
+};
+
+TandemHidRegistrar g_hid_registrar;
+
+}  // namespace
+
 void setup() {
   if constexpr (tandem::board::kPinStatusLed >= 0) {
     pinMode(tandem::board::kPinStatusLed, OUTPUT);
@@ -183,9 +235,10 @@ void setup() {
   g_monitors[0].set_config(fs_cfg);
   g_monitors[1].set_config(fs_cfg);
 
-  g_dual_joystick.begin();
+  USB.VID(kUsbVid);
+  USB.PID(kUsbPid);
   USB.manufacturerName("T.A.N.D.E.M.");
-  USB.productName("TANDEM Base Station");
+  USB.productName(kHidInterfaceName);
   USB.begin();
 
   const bool espnow_ok = setup_espnow_rx();
@@ -209,8 +262,12 @@ void setup() {
   Serial.printf("ESP-NOW    : %s (failsafe=%lu ms)\n",
                 espnow_ok ? "READY" : "INIT FAILED",
                 static_cast<unsigned long>(kFailsafeTimeoutMs));
-  Serial.printf("USB HID    : Dual Joystick (ID 1=Left, ID 2=Right, %u-byte desc)\n",
-                static_cast<unsigned>(kDualReportDescriptorBytes));
+  Serial.printf("USB HID    : %s (VID=0x%04X PID=0x%04X, %s, %u-byte desc)\n",
+                kHidInterfaceName,
+                static_cast<unsigned>(kUsbVid),
+                static_cast<unsigned>(kUsbPid),
+                kCombinedMode ? "Combined 1x" : "Dual 2x",
+                static_cast<unsigned>(kReportDescriptorBytes));
 
   const uint32_t now_ms = millis();
   g_last_usb_us = micros();
@@ -241,7 +298,6 @@ void loop() {
         g_monitors[i].on_packet(local_snap[i].state, now_ms);
         g_last_rssi[i] = local_snap[i].rssi;
         if (!was_connected && g_monitors[i].is_connected()) {
-          // Resync link stats when a stick recovers from disconnect/reboot.
           portENTER_CRITICAL(&g_rx_mux);
           g_link_stats[i].reset();
           g_link_stats[i].record_seq(local_snap[i].seq);
@@ -251,12 +307,22 @@ void loop() {
       g_monitors[i].update(now_ms);
     }
 
-    const uint8_t report_ids[2] = {kReportIdLeft, kReportIdRight};
-    for (size_t i = 0; i < 2U; ++i) {
-      if (g_dual_joystick.send(report_ids[i], g_monitors[i].state())) {
+    if constexpr (kCombinedMode) {
+      const tandem::StickState combined = tandem::combine_sticks(
+          g_monitors[0].state(), g_monitors[1].state(), g_combine_config);
+      if (send_hid_report(kReportIdLeft, combined)) {
         ++g_usb_sent;
       } else {
         ++g_usb_dropped;
+      }
+    } else {
+      const uint8_t report_ids[2] = {kReportIdLeft, kReportIdRight};
+      for (size_t i = 0; i < 2U; ++i) {
+        if (send_hid_report(report_ids[i], g_monitors[i].state())) {
+          ++g_usb_sent;
+        } else {
+          ++g_usb_dropped;
+        }
       }
     }
   }
