@@ -62,6 +62,7 @@ pio run
 
 # Build a specific board target
 pio run -e esp32_wroom_input_diag
+pio run -e esp32_wroom_ble_hid
 pio run -e esp32_s2_input_diag
 pio run -e esp32_s2_usb_hid
 
