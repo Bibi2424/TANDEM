@@ -35,7 +35,7 @@ TANDEM/
 ├── docs/requirements.md       # Baseline hardware, firmware, and verification requirements
 ├── include/boards/            # Per-board capability flags and ADC1/GPIO pinmaps
 ├── lib/tandem_core/           # Pure, dependency-free C++17 core library (host-testable)
-├── src/apps/bringup/          # Standalone firmware apps selected via build_src_filter
+├── src/apps/                  # Standalone firmware apps selected via build_src_filter
 ├── test/                      # Native host Unity unit tests (core, axis shaping, input pipeline)
 ├── platformio.ini             # PlatformIO environments (native, ESP32-WROOM, ESP32-S2)
 ├── AGENTS.md                  # Repository development & coding conventions
@@ -60,12 +60,13 @@ pio test -e native
 # Build all default firmware environments
 pio run
 
-# Build a specific board bring-up target
-pio run -e esp32_wroom_bringup
-pio run -e esp32_s2_bringup
+# Build a specific board target
+pio run -e esp32_wroom_input_diag
+pio run -e esp32_s2_input_diag
+pio run -e esp32_s2_usb_hid
 
 # Flash and open the serial console (115200 baud)
-pio run -e esp32_s2_bringup -t upload
+pio run -e esp32_s2_usb_hid -t upload
 pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
 ```
 
