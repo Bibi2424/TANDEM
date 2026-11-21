@@ -36,7 +36,7 @@ TANDEM/
 ├── include/boards/            # Per-board capability flags and ADC1/GPIO pinmaps
 ├── lib/tandem_core/           # Pure, dependency-free C++17 core library (host-testable)
 ├── src/apps/bringup/          # Standalone firmware apps selected via build_src_filter
-├── test/test_core/            # Native host Unity unit tests
+├── test/                      # Native host Unity unit tests (core, axis shaping, input pipeline)
 ├── platformio.ini             # PlatformIO environments (native, ESP32-WROOM, ESP32-S2)
 ├── AGENTS.md                  # Repository development & coding conventions
 └── LICENSE                    # MIT License
