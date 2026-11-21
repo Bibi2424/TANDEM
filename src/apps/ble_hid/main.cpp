@@ -11,8 +11,11 @@
 #include <cstring>
 
 #include "boards/board_config.h"
+#include "tandem/axis_shaping.h"
 #include "tandem/hid_report.h"
+#include "tandem/input_pipeline.h"
 #include "tandem/types.h"
+#include "tandem_hal/input_scanner.h"
 
 static_assert(tandem::board::kHasBle, "ble_hid requires a board with BLE support");
 
@@ -21,7 +24,10 @@ namespace {
 constexpr uint32_t kReportIntervalMs = 10;    // 100 Hz BLE HID notification target
 constexpr uint32_t kStatusIntervalMs = 2000;  // Throttled serial telemetry
 constexpr uint32_t kLedSynthIntervalMs = 250;
-constexpr uint32_t kLedIdleIntervalMs = 1000;
+constexpr uint32_t kLedLiveIntervalMs = 1000;
+constexpr uint8_t kBootButtonPin = 0;         // ESP32 BOOT/GPIO0 (active-low)
+constexpr uint32_t kButtonDebounceMs = 30;
+constexpr float kDefaultDeadzone = 0.05f;
 constexpr float kTwoPi = 6.28318530718f;
 
 constexpr const char* kDeviceName = "TANDEM-BLE-Stick";
@@ -50,13 +56,42 @@ BLECharacteristic* g_input_report = nullptr;
 // Static copy because BLEHIDDevice::reportMap() takes a non-const uint8_t* pointer.
 uint8_t g_report_map[tandem::kHidJoystickReportDescriptorBytes]{};
 
+tandem::hal::InputScanner g_scanner;
+tandem::hal::InputScannerConfig g_scanner_config{};
+tandem::StickInputConfig g_input_config{};
+
+#if defined(TANDEM_BLE_HID_SYNTHETIC_DEFAULT)
 bool g_synthetic_enabled = true;
+#else
+bool g_synthetic_enabled = false;
+#endif
+
 uint32_t g_last_report_ms = 0;
 uint32_t g_last_status_ms = 0;
 uint32_t g_last_led_ms = 0;
 bool g_led_state = false;
 uint32_t g_sent_reports = 0;
+tandem::RawStickInput g_last_raw{};
 tandem::StickState g_last_state = tandem::make_centered_state(tandem::kStateFlagConnected);
+
+bool g_boot_stable_pressed = false;
+bool g_boot_last_raw_pressed = false;
+uint32_t g_boot_last_change_ms = 0;
+
+tandem::StickInputConfig make_default_input_config(
+    const tandem::hal::InputScannerConfig& scanner_cfg) noexcept {
+  tandem::StickInputConfig cfg{};
+  for (uint8_t i = 0; i < tandem::kMaxAxes; ++i) {
+    if (scanner_cfg.axis_pins[i] >= 0) {
+      cfg.axes[i].calibration = tandem::AxisCalibration{};
+      cfg.axes[i].deadzone = kDefaultDeadzone;
+      cfg.axes[i].curve = tandem::make_linear_curve();
+      cfg.axes[i].invert = false;
+      cfg.axes[i].enabled = true;
+    }
+  }
+  return cfg;
+}
 
 int16_t sine_axis(float phase_rad) noexcept {
   const float scaled = std::sin(phase_rad) * static_cast<float>(tandem::kAxisMax);
@@ -127,13 +162,27 @@ void setup_ble_hid() {
   BLEDevice::startAdvertising();
 }
 
-void poll_serial_commands() {
+void poll_toggle_inputs(uint32_t now_ms) {
   while (Serial.available() > 0) {
     const int ch = Serial.read();
     if (ch == 't' || ch == 'T') {
       g_synthetic_enabled = !g_synthetic_enabled;
       Serial.printf("[ble_hid] mode -> %s\n",
-                    g_synthetic_enabled ? "SYNTHETIC" : "CENTERED");
+                    g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
+    }
+  }
+
+  const bool raw_pressed = (digitalRead(kBootButtonPin) == LOW);
+  if (raw_pressed != g_boot_last_raw_pressed) {
+    g_boot_last_raw_pressed = raw_pressed;
+    g_boot_last_change_ms = now_ms;
+  } else if (raw_pressed != g_boot_stable_pressed &&
+             static_cast<uint32_t>(now_ms - g_boot_last_change_ms) >= kButtonDebounceMs) {
+    g_boot_stable_pressed = raw_pressed;
+    if (g_boot_stable_pressed) {
+      g_synthetic_enabled = !g_synthetic_enabled;
+      Serial.printf("[ble_hid] BOOT button -> mode %s\n",
+                    g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
     }
   }
 }
@@ -145,6 +194,11 @@ void setup() {
     pinMode(tandem::board::kPinStatusLed, OUTPUT);
     digitalWrite(tandem::board::kPinStatusLed, LOW);
   }
+  pinMode(kBootButtonPin, INPUT_PULLUP);
+
+  g_scanner_config = tandem::board::make_default_scanner_config();
+  g_scanner.init(g_scanner_config);
+  g_input_config = make_default_input_config(g_scanner_config);
 
   Serial.begin(115200);
   delay(200);
@@ -161,8 +215,8 @@ void setup() {
                 static_cast<unsigned>(tandem::kHidJoystickReportDescriptorBytes),
                 static_cast<unsigned>(tandem::kHidReportIdJoystick),
                 static_cast<unsigned>(tandem::kHidJoystickReportBytes));
-  Serial.printf("Mode       : %s (send 't' over Serial to toggle)\n",
-                g_synthetic_enabled ? "SYNTHETIC" : "CENTERED");
+  Serial.printf("Mode       : %s (press BOOT/GPIO0 or send 't' to toggle)\n",
+                g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
 
   const uint32_t now_ms = millis();
   g_last_report_ms = now_ms;
@@ -173,9 +227,11 @@ void setup() {
 void loop() {
   const uint32_t now_ms = millis();
 
-  poll_serial_commands();
+  poll_toggle_inputs(now_ms);
 
   if (g_restart_advertising.exchange(false, std::memory_order_acq_rel)) {
+    g_last_raw = tandem::RawStickInput{};
+    g_last_state = tandem::make_centered_state(tandem::kStateFlagNone);
     BLEDevice::startAdvertising();
     Serial.println("[ble_hid] disconnected -> advertising restarted");
   }
@@ -183,10 +239,14 @@ void loop() {
   if (static_cast<uint32_t>(now_ms - g_last_report_ms) >= kReportIntervalMs) {
     g_last_report_ms = now_ms;
 
+    // Sample continuously even while disconnected so debounce state and first
+    // post-reconnect report are always fresh (never stale pre-disconnect values).
     if (g_synthetic_enabled) {
       g_last_state = make_synthetic_state(now_ms);
     } else {
-      g_last_state = tandem::make_centered_state(tandem::kStateFlagConnected);
+      g_scanner.sample(now_ms, g_last_raw);
+      g_last_state = tandem::process_stick_input(
+          g_last_raw, g_input_config, tandem::kStateFlagConnected);
     }
 
     if (g_connected.load(std::memory_order_acquire) && g_input_report != nullptr) {
@@ -199,7 +259,7 @@ void loop() {
   }
 
   const uint32_t led_interval =
-      g_synthetic_enabled ? kLedSynthIntervalMs : kLedIdleIntervalMs;
+      g_synthetic_enabled ? kLedSynthIntervalMs : kLedLiveIntervalMs;
   if constexpr (tandem::board::kPinStatusLed >= 0) {
     if (static_cast<uint32_t>(now_ms - g_last_led_ms) >= led_interval) {
       g_last_led_ms = now_ms;
@@ -211,11 +271,15 @@ void loop() {
   if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {
     g_last_status_ms = now_ms;
     Serial.printf(
-        "[%lu ms] mode=%s conn=%d sent=%lu | out=[%d,%d,%d,%d] btns=0x%08lX hat=%u\n",
+        "[%lu ms] mode=%s conn=%d sent=%lu | raw=[%ld,%ld,%ld,%ld] out=[%d,%d,%d,%d] btns=0x%08lX hat=%u\n",
         static_cast<unsigned long>(now_ms),
-        g_synthetic_enabled ? "SYNTH" : "CENTER",
+        g_synthetic_enabled ? "SYNTH" : "LIVE",
         g_connected.load(std::memory_order_acquire) ? 1 : 0,
         static_cast<unsigned long>(g_sent_reports),
+        static_cast<long>(g_last_raw.axes[0]),
+        static_cast<long>(g_last_raw.axes[1]),
+        static_cast<long>(g_last_raw.axes[2]),
+        static_cast<long>(g_last_raw.axes[3]),
         static_cast<int>(g_last_state.axes[0]),
         static_cast<int>(g_last_state.axes[1]),
         static_cast<int>(g_last_state.axes[2]),
