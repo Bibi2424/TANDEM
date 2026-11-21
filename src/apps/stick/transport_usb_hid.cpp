@@ -1,0 +1,89 @@
+#include "transport_usb_hid.h"
+
+#if TANDEM_CAP_NATIVE_USB
+
+#include <USB.h>
+#include <cstdio>
+#include <cstring>
+
+#include "tandem/hid_report.h"
+
+namespace tandem::stick {
+
+TandemUsbJoystick::TandemUsbJoystick() {
+  static bool registered = false;
+  if (!registered) {
+    registered = true;
+    USBHID::addDevice(
+        this, static_cast<uint16_t>(tandem::kHidJoystickReportDescriptorBytes));
+  }
+}
+
+void TandemUsbJoystick::begin() { hid_.begin(); }
+
+bool TandemUsbJoystick::ready() const { return hid_.ready(); }
+
+bool TandemUsbJoystick::send(const tandem::StickState& state) {
+  if (!hid_.ready()) {
+    return false;
+  }
+  const tandem::HidJoystickReport report = tandem::encode_hid_joystick_report(state);
+  return hid_.SendReport(
+      tandem::kHidReportIdJoystick, report.bytes, sizeof(report.bytes), 1);
+}
+
+uint16_t TandemUsbJoystick::_onGetDescriptor(uint8_t* buffer) {
+  std::memcpy(buffer,
+              tandem::kHidJoystickReportDescriptor,
+              tandem::kHidJoystickReportDescriptorBytes);
+  return static_cast<uint16_t>(tandem::kHidJoystickReportDescriptorBytes);
+}
+
+void UsbHidTransport::init_usb_stack() noexcept {
+  if (!stack_initialized_) {
+    joystick_.begin();
+    USB.begin();
+    stack_initialized_ = true;
+  }
+}
+
+bool UsbHidTransport::start() noexcept {
+  init_usb_stack();
+  active_ = true;
+  return true;
+}
+
+void UsbHidTransport::stop() noexcept {
+  if (active_) {
+    // Release all buttons/axes on the host before pausing HID reports so USB CDC stays alive
+    // without leaving stale held inputs.
+    joystick_.send(tandem::make_centered_state(0));
+  }
+  active_ = false;
+}
+
+bool UsbHidTransport::send(tandem::StickId,
+                           const tandem::StickState& state) noexcept {
+  if (!active_) {
+    return false;
+  }
+  if (joystick_.send(state)) {
+    ++sent_;
+    return true;
+  }
+  ++dropped_;
+  return false;
+}
+
+void UsbHidTransport::format_stats(char* out, size_t out_len) const noexcept {
+  std::snprintf(out,
+                out_len,
+                "ready=%d sent=%lu drop=%lu",
+                joystick_.ready() ? 1 : 0,
+                static_cast<unsigned long>(sent_),
+                static_cast<unsigned long>(dropped_));
+}
+
+}  // namespace tandem::stick
+
+#endif  // TANDEM_CAP_NATIVE_USB

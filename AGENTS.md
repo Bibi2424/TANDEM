@@ -48,14 +48,12 @@
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
   - `lib/tandem_hal/` — MCU/board-isolated ADC1 and GPIO input scanner adapter (`espressif32`-scoped) sampling raw axes, debounced buttons, and optional 4-way hat into `tandem::RawStickInput`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
-  - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (`input_diag`, `usb_hid`, `ble_hid`, `espnow_tx`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
+  - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
-  - Input diagnostics (board bring-up, ADC1 jitter & debounced GPIO; `esp32dev` / `lolin_s2_mini` — on S2 Mini, if USB CDC isn't active yet, enter ROM bootloader via `BOOT`/`GPIO0` + `RST`): `pio run -e esp32_wroom_input_diag`, `pio run -e esp32_s2_input_diag`
-  - Wired USB HID prototype (composite USB CDC + 1000 Hz USB HID Joystick): `pio run -e esp32_s2_usb_hid`
-  - Direct BLE HID prototype (Mode A, HOGP 100 Hz BLE HID Joystick, `ESP32-WROOM` with synthetic test mode): `pio run -e esp32_wroom_ble_hid`
-  - Mode B ESP-NOW stick TX (`ESP32-WROOM`, live + synthetic toggle) & USB Base Station (`ESP32-S2`, Dual or Combined USB HID + failsafe): `pio run -e esp32_wroom_espnow_tx` (Left) / `esp32_wroom_espnow_tx_right` (Right), `pio run -e esp32_s2_base_station` (Dual) / `esp32_s2_base_station_combined` (Combined)
+  - Unified capability-gated stick firmware (`src/apps/stick/` — USB HID, BLE HID, and ESP-NOW TX with mutually exclusive radio teardown; optional `-DTANDEM_DEFAULT_TRANSPORT_MODE=0|1|2`, `-DTANDEM_STICK_SYNTHETIC_DEFAULT`): `pio run -e esp32_s3_stick`, `pio run -e esp32_wroom_stick` (Left) / `esp32_wroom_stick_right` (Right), `pio run -e esp32_s2_stick`
+  - USB Base Station (`ESP32-S2` / `ESP32-S3`, Dual or Combined USB HID + failsafe): `pio run -e esp32_s2_base_station` (Dual) / `esp32_s2_base_station_combined` (Combined), `pio run -e esp32_s3_base_station`
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
 - **CI:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` and `pio run` on pushes to `main` and pull requests.

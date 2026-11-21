@@ -37,7 +37,7 @@ TANDEM/
 ├── lib/tandem_core/           # Pure, dependency-free C++17 core library (host-testable)
 ├── src/apps/                  # Standalone firmware apps selected via build_src_filter
 ├── test/                      # Native host Unity unit tests (core, axis shaping, input pipeline)
-├── platformio.ini             # PlatformIO environments (native, ESP32-WROOM, ESP32-S2)
+├── platformio.ini             # PlatformIO environments (native, ESP32-WROOM, ESP32-S2, ESP32-S3)
 ├── AGENTS.md                  # Repository development & coding conventions
 └── LICENSE                    # MIT License
 ```
@@ -61,15 +61,14 @@ pio test -e native
 pio run
 
 # Build a specific board target
-pio run -e esp32_wroom_input_diag
-pio run -e esp32_wroom_ble_hid
-pio run -e esp32_wroom_espnow_tx
-pio run -e esp32_s2_input_diag
-pio run -e esp32_s2_usb_hid
+pio run -e esp32_wroom_stick
+pio run -e esp32_s2_stick
 pio run -e esp32_s2_base_station
+pio run -e esp32_s3_stick
+pio run -e esp32_s3_base_station
 
 # Flash and open the serial console (115200 baud)
-pio run -e esp32_s2_usb_hid -t upload
+pio run -e esp32_s2_stick -t upload
 pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
 ```
 
@@ -81,7 +80,7 @@ To get accurate C++ IntelliSense in editors using `clangd`:
    ```bash
    pio run -t compiledb -e native
    # or for a specific ESP32 app/board, e.g.:
-   pio run -t compiledb -e esp32_s2_usb_hid
+   pio run -t compiledb -e esp32_s2_stick
    ```
 2. **Configure your `clangd` client with `--query-driver`** so it can resolve system headers (`<cstdint>`, etc.) from the PlatformIO/host compiler (unsupported Xtensa/GCC flags are already stripped by [.clangd](.clangd)):
    ```text

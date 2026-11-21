@@ -11,16 +11,21 @@
 // - Analog: Prefer ADC1 (GPIO1-GPIO10); hardware supports up to 13-bit, normalized to 12-bit here
 // - Avoid strapping pins (GPIO0, GPIO45, GPIO46).
 
+#define TANDEM_CAP_NATIVE_USB 1
+#define TANDEM_CAP_BLE 0
+#define TANDEM_CAP_ESPNOW 1
+
 namespace tandem::board {
 
 inline constexpr const char* kBoardName = "ESP32-S2 (LOLIN S2 Mini)";
-inline constexpr bool kHasNativeUsb = true;
-inline constexpr bool kHasBle = false;
-inline constexpr bool kHasEspNow = true;
+inline constexpr bool kHasNativeUsb = (TANDEM_CAP_NATIVE_USB != 0);
+inline constexpr bool kHasBle = (TANDEM_CAP_BLE != 0);
+inline constexpr bool kHasEspNow = (TANDEM_CAP_ESPNOW != 0);
 inline constexpr uint8_t kAdcBits = 12;
 
 // Onboard status LED on LOLIN S2 Mini (GPIO15); -1 if absent.
 inline constexpr int8_t kPinStatusLed = 15;
+inline constexpr uint8_t kPinBootButton = 0;  // Active-low BOOT/GPIO0 button
 
 // Tentative ADC1 axis pins — confirm against physical dev-board breakout before use.
 inline constexpr uint8_t kPinAxisX = 1;
