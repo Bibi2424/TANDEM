@@ -16,6 +16,9 @@ inline constexpr bool kHasBle = true;
 inline constexpr bool kHasEspNow = true;
 inline constexpr uint8_t kAdcBits = 12;
 
+// Onboard status LED on classic ESP32 devkits (typically GPIO2); -1 if absent.
+inline constexpr int8_t kPinStatusLed = 2;
+
 // Tentative ADC1 axis pins — confirm against physical wiring before use.
 inline constexpr uint8_t kPinAxisX = 34;
 inline constexpr uint8_t kPinAxisY = 35;
