@@ -26,9 +26,11 @@ Follow this procedure for every **Task** (and its parent **Feature**, if any) in
 
 ## 3. Opening a Pull Request
 
-1. Open the PR against `main` using `Closes #<task>` and `Part of #<feature>` (if applicable).
+1. **Verify before PR:** Ensure unit tests and affected builds pass, and any hardware-only modifications are verified on physical hardware first (unless the human specifies otherwise).
+2. **Ask permission** before committing, pushing, or opening the PR.
+3. Open the PR against `main` using `Closes #<task>` and `Part of #<feature>` (if applicable).
    - Do **not** merge the PR unless explicitly requested.
-2. Move the **Task** to **In review**.
+4. Move the **Task** to **In review**.
 
 ## 4. After the PR is Closed / Merged
 
