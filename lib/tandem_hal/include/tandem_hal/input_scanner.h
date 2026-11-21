@@ -6,6 +6,7 @@
 
 namespace tandem {
 struct RawStickInput;
+struct StickInputConfig;
 }
 
 namespace tandem::hal {
@@ -53,5 +54,11 @@ class InputScanner {
   DebouncedPin hat_[kHatPinCount]{};
   bool initialized_{false};
 };
+
+/// Builds a default StickInputConfig for all active axis pins in `scanner_cfg`,
+/// using full-scale ADC range [0 .. (1 << adc_bits) - 1], midpoint center,
+/// linear curve, and sanitized deadzone (clamped to [0.0f, 0.99f]).
+tandem::StickInputConfig make_default_input_config(
+    const InputScannerConfig& scanner_cfg, float deadzone = 0.05f) noexcept;
 
 }  // namespace tandem::hal

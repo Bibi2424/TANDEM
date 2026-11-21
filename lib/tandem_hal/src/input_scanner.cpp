@@ -1,6 +1,7 @@
 #include "tandem_hal/input_scanner.h"
 
 #include <Arduino.h>
+#include <cmath>
 
 #include "tandem/input_pipeline.h"
 
@@ -123,6 +124,35 @@ void InputScanner::sample(uint32_t now_ms, tandem::RawStickInput& out) noexcept 
   const bool south = hat_[2].update(now_ms, config_.debounce_ms);
   const bool west = hat_[3].update(now_ms, config_.debounce_ms);
   out.hat = encode_hat_4way(north, east, south, west);
+}
+
+tandem::StickInputConfig make_default_input_config(
+    const InputScannerConfig& scanner_cfg, float deadzone) noexcept {
+  tandem::StickInputConfig cfg{};
+
+  uint8_t adc_bits = scanner_cfg.adc_bits;
+  if (adc_bits < 1U || adc_bits > 16U) {
+    adc_bits = 12U;
+  }
+  const int32_t max_adc = (int32_t{1} << adc_bits) - 1;
+
+  float sanitized_dz = deadzone;
+  if (std::isnan(sanitized_dz) || sanitized_dz < 0.0f) {
+    sanitized_dz = 0.0f;
+  } else if (sanitized_dz > 0.99f) {
+    sanitized_dz = 0.99f;
+  }
+
+  for (uint8_t i = 0; i < tandem::kMaxAxes; ++i) {
+    if (scanner_cfg.axis_pins[i] >= 0) {
+      cfg.axes[i].enabled = true;
+      cfg.axes[i].calibration = tandem::AxisCalibration{0, max_adc / 2, max_adc};
+      cfg.axes[i].invert = false;
+      cfg.axes[i].deadzone = sanitized_dz;
+      cfg.axes[i].curve = tandem::make_linear_curve();
+    }
+  }
+  return cfg;
 }
 
 }  // namespace tandem::hal
