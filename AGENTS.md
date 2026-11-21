@@ -48,7 +48,7 @@
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (currently `src/apps/bringup/`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
-  - `test/` — Native host Unity unit tests (`test/test_core/`).
+  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
   - ESP32-WROOM bring-up (`esp32dev`): `pio run -e esp32_wroom_bringup`
