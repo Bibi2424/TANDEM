@@ -68,11 +68,13 @@ static_assert(std::is_trivially_copyable_v<AxisConfig>,
 float calibrate_axis(int32_t raw, const AxisCalibration& calibration) noexcept;
 
 /// Applies an inner deadzone in [0.0f, 1.0f) with smooth boundary rescaling.
-/// Returns +0.0f inside the deadzone, for deadzone >= 1.0f, or on non-finite input.
+/// `deadzone <= 0.0f` acts as no deadzone (clamped passthrough normalizing -0.0f to +0.0f).
+/// Returns +0.0f inside the deadzone, for `deadzone >= 1.0f`, or if either input is non-finite.
 float apply_deadzone(float normalized, float deadzone) noexcept;
 
 /// Applies a sign-preserving response curve (`Linear` or cubic `Expo`) in [-1.0f, +1.0f].
-/// Returns +0.0f on non-finite inputs/parameters or unknown curve types.
+/// Returns +0.0f on non-finite inputs/parameters or unknown curve types (fail-closed;
+/// config/CRC validation in #6 must still reject unknown CurveType IDs explicitly).
 float apply_curve(float normalized, const AxisCurve& curve) noexcept;
 
 /// Quantizes a normalized [-1.0f, +1.0f] value symmetrically to [kAxisMin, kAxisMax].

@@ -363,6 +363,63 @@ void test_shape_axis_enabled_invert_and_composition() {
   TEST_ASSERT_EQUAL_INT16(10240, tandem::shape_axis(400, composed));
 }
 
+void test_shape_axis_full_adc_sweep_and_center_step() {
+  tandem::AxisConfig default_lin{};
+  default_lin.enabled = true;
+  TEST_ASSERT_EQUAL_INT16(16, tandem::shape_axis(2049, default_lin));
+  TEST_ASSERT_EQUAL_INT16(-16, tandem::shape_axis(2047, default_lin));
+
+  tandem::AxisConfig asym_expo{};
+  asym_expo.calibration = {100, 1800, 3900};
+  asym_expo.deadzone = 0.1f;
+  asym_expo.curve = tandem::make_expo_curve(0.6f);
+  asym_expo.enabled = true;
+
+  tandem::AxisConfig asym_expo_inv = asym_expo;
+  asym_expo_inv.invert = true;
+
+  tandem::AxisConfig sym_cubic_inv{};
+  sym_cubic_inv.calibration = {500, 2000, 3500};
+  sym_cubic_inv.deadzone = 0.15f;
+  sym_cubic_inv.curve = tandem::make_expo_curve(1.0f);
+  sym_cubic_inv.invert = true;
+  sym_cubic_inv.enabled = true;
+
+  const tandem::AxisConfig configs[] = {
+      default_lin,
+      asym_expo,
+      asym_expo_inv,
+      sym_cubic_inv,
+  };
+
+  for (const auto& cfg : configs) {
+    int16_t prev = 0;
+    for (int32_t raw = -10; raw <= 4105; ++raw) {
+      const int16_t y = tandem::shape_axis(raw, cfg);
+      TEST_ASSERT_TRUE(y >= tandem::kAxisMin && y <= tandem::kAxisMax);
+      TEST_ASSERT_NOT_EQUAL(INT16_MIN, y);
+
+      if (raw > -10) {
+        if (cfg.invert) {
+          TEST_ASSERT_TRUE(y <= prev);
+        } else {
+          TEST_ASSERT_TRUE(y >= prev);
+        }
+      }
+      if (raw == cfg.calibration.center) {
+        TEST_ASSERT_EQUAL_INT16(tandem::kAxisCenter, y);
+      }
+      if (raw <= cfg.calibration.min) {
+        TEST_ASSERT_EQUAL_INT16(cfg.invert ? tandem::kAxisMax : tandem::kAxisMin, y);
+      }
+      if (raw >= cfg.calibration.max) {
+        TEST_ASSERT_EQUAL_INT16(cfg.invert ? tandem::kAxisMin : tandem::kAxisMax, y);
+      }
+      prev = y;
+    }
+  }
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_defaults_validity_and_factories);
@@ -377,5 +434,6 @@ int main(int, char**) {
   RUN_TEST(test_apply_curve_guards_non_finite_and_unknown_enum);
   RUN_TEST(test_normalized_to_axis_symmetry_rounding_and_guards);
   RUN_TEST(test_shape_axis_enabled_invert_and_composition);
+  RUN_TEST(test_shape_axis_full_adc_sweep_and_center_step);
   return UNITY_END();
 }

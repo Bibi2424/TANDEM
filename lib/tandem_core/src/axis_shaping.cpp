@@ -48,6 +48,7 @@ float calibrate_axis(int32_t raw, const AxisCalibration& calibration) noexcept {
 }
 
 float apply_deadzone(float normalized, float deadzone) noexcept {
+  // Non-finite guards throughout this file assume -ffast-math is not enabled.
   if (!std::isfinite(normalized) || !std::isfinite(deadzone)) {
     return 0.0f;
   }
@@ -113,6 +114,8 @@ float apply_curve(float normalized, const AxisCurve& curve) noexcept {
     }
 
     default:
+      // Fail closed at runtime; #6 config/CRC validation must still reject unknown
+      // curve IDs so corrupt settings cannot masquerade as a dead axis.
       return 0.0f;
   }
 }
