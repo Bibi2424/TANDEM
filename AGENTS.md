@@ -49,7 +49,7 @@
   - `lib/tandem_hal/` — MCU/board-isolated ADC1 and GPIO input scanner adapter (`espressif32`-scoped) sampling raw axes, debounced buttons, and optional 4-way hat into `tandem::RawStickInput`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (`input_diag`, `usb_hid`, `ble_hid`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
-  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`, `test/test_hid_report/`).
+  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
   - Input diagnostics (board bring-up, ADC1 jitter & debounced GPIO; `esp32dev` / `lolin_s2_mini` — on S2 Mini, if USB CDC isn't active yet, enter ROM bootloader via `BOOT`/`GPIO0` + `RST`): `pio run -e esp32_wroom_input_diag`, `pio run -e esp32_s2_input_diag`
