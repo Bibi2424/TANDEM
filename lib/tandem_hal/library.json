@@ -1,0 +1,13 @@
+{
+  "name": "tandem_hal",
+  "version": "0.1.0",
+  "description": "MCU/board-isolated ADC1 and GPIO input scanner adapter for T.A.N.D.E.M.",
+  "platforms": ["espressif32"],
+  "dependencies": {
+    "tandem_core": "*"
+  },
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  }
+}

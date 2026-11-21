@@ -46,13 +46,15 @@
 - **Build tool:** PlatformIO (`pio` via `%USERPROFILE%\.platformio\penv\Scripts`), configured in [platformio.ini](platformio.ini).
 - **Directory layout:**
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
+  - `lib/tandem_hal/` — MCU/board-isolated ADC1 and GPIO input scanner adapter (`espressif32`-scoped) sampling raw axes, debounced buttons, and optional 4-way hat into `tandem::RawStickInput`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
-  - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (currently `src/apps/bringup/`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
+  - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (`bringup`, `input_diag`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
   - ESP32-WROOM bring-up (`esp32dev`): `pio run -e esp32_wroom_bringup`
   - ESP32-S2 bring-up (`lolin_s2_mini`; if USB CDC isn't active yet, enter ROM bootloader via `BOOT`/`GPIO0` + `RST`): `pio run -e esp32_s2_bringup`
+  - Input diagnostics (ADC1 jitter & debounced GPIO): `pio run -e esp32_wroom_input_diag`, `pio run -e esp32_s2_input_diag`
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
 - **CI:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` and `pio run` on pushes to `main` and pull requests.
@@ -74,16 +76,18 @@
 ## Verification & Quality Gates
 
 1. **Native Host Unit Tests (for Pure Logic)**
-   - Changes to input shaping (calibration, deadzone rescaling, curves), failsafe timeouts, packet codecs, or config schema/CRC validation must include native host unit tests covering nominal behavior and edge cases (boundaries, sign preservation, degenerate bounds, corrupt CRC, version mismatch, timeouts).
+   - Unit test code whenever possible. Changes to input shaping (calibration, deadzone rescaling, curves), failsafe timeouts, packet codecs, config schema/CRC validation, or any other host-testable logic must include native host unit tests covering nominal behavior and edge cases (boundaries, sign preservation, degenerate bounds, corrupt CRC, version mismatch, timeouts).
 2. **Affected-Target Builds**
    - Verify that all affected environments compile and pass cleanly (`pio test -e native` and `pio run` / affected `-e <env>` targets) before finishing.
-3. **Hardware-in-the-Loop (HIL) Honesty**
+3. **Hardware-in-the-Loop (HIL) Honesty & Pre-PR Gate**
    - Never claim on-hardware behavior (ADC jitter/centering, wireless reliability/drop rates, USB/BLE HID smoothness or polling rate, power-cycle persistence) is verified based solely on compilation or host unit tests. Clearly list remaining hardware checks for the active target board and mode.
+   - Code involving modifications only testable on hardware **must be verified on physical hardware before a PR can be opened**, unless the human explicitly specifies otherwise.
 
 ---
 
 ## Git, Issues & Workflow Conventions
 
+- **Human-controlled workflow phases:** Transitions between workflow phases are human-controlled. AI agents **must ask permission before committing, pushing, or opening a PR**.
 - **Issue hierarchy:** Track work in GitHub Issues (`Bibi2424/TANDEM`) using native **Feature** issues as top-level parents, broken into PR-sized **Task** sub-issues only when ready to implement them (and **Bug** issues for defects).
 - **Assignment:** Assign active issues (tasks being worked on, and their parent feature when active) to `Bibi2424` when starting work on them.
 - **Branching:** Do not work or commit directly on `main`; create a topic branch (e.g., `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`) for all new changes.
