@@ -48,13 +48,11 @@
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
   - `lib/tandem_hal/` — MCU/board-isolated ADC1 and GPIO input scanner adapter (`espressif32`-scoped) sampling raw axes, debounced buttons, and optional 4-way hat into `tandem::RawStickInput`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
-  - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (`bringup`, `input_diag`, `usb_hid`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
+  - `src/apps/<name>/` — Standalone firmware apps and independent transport prototypes (`input_diag`, `usb_hid`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_input_pipeline/`, `test/test_hid_report/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
-  - ESP32-WROOM bring-up (`esp32dev`): `pio run -e esp32_wroom_bringup`
-  - ESP32-S2 bring-up (`lolin_s2_mini`; if USB CDC isn't active yet, enter ROM bootloader via `BOOT`/`GPIO0` + `RST`): `pio run -e esp32_s2_bringup`
-  - Input diagnostics (ADC1 jitter & debounced GPIO): `pio run -e esp32_wroom_input_diag`, `pio run -e esp32_s2_input_diag`
+  - Input diagnostics (board bring-up, ADC1 jitter & debounced GPIO; `esp32dev` / `lolin_s2_mini` — on S2 Mini, if USB CDC isn't active yet, enter ROM bootloader via `BOOT`/`GPIO0` + `RST`): `pio run -e esp32_wroom_input_diag`, `pio run -e esp32_s2_input_diag`
   - Wired USB HID prototype (composite USB CDC + 1000 Hz USB HID Joystick): `pio run -e esp32_s2_usb_hid`
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
