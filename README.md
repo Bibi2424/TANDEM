@@ -63,6 +63,10 @@ pio run
 # Build a specific board bring-up target
 pio run -e esp32_wroom_bringup
 pio run -e esp32_s2_bringup
+
+# Flash and open the serial console (115200 baud)
+pio run -e esp32_s2_bringup -t upload
+pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
 ```
 
 ---
