@@ -2,7 +2,6 @@
 .pio/
 .pioenvs/
 .piolibdeps/
-.clangd
 compile_commands.json
 
 # Arduino / C / C++ build output
@@ -16,6 +15,8 @@ build/
 .vscode/*
 !.vscode/extensions.json
 *.code-workspace
+*.sublime-project
+*.sublime-workspace
 
 # OS
 .DS_Store

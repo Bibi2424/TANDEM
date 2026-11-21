@@ -71,6 +71,21 @@ pio run -e esp32_s2_usb_hid -t upload
 pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
 ```
 
+### Editor / LSP Setup (`clangd`)
+
+To get accurate C++ IntelliSense in editors using `clangd`:
+
+1. **Generate `compile_commands.json` for the environment you are editing** (pass `-e <env>` so PlatformIO doesn't overwrite it with the last `default_envs` entry):
+   ```bash
+   pio run -t compiledb -e native
+   # or for a specific ESP32 app/board, e.g.:
+   pio run -t compiledb -e esp32_s2_usb_hid
+   ```
+2. **Configure your `clangd` client with `--query-driver`** so it can resolve system headers (`<cstdint>`, etc.) from the PlatformIO/host compiler (unsupported Xtensa/GCC flags are already stripped by [.clangd](.clangd)):
+   ```text
+   --query-driver=**/*xtensa-esp32*-elf-*,**/*g++*
+   ```
+
 ---
 
 ## Documentation & Roadmap
