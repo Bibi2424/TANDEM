@@ -6,7 +6,6 @@
 #include <BLEServer.h>
 
 #include <atomic>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 
@@ -14,6 +13,7 @@
 #include "tandem/axis_shaping.h"
 #include "tandem/hid_report.h"
 #include "tandem/input_pipeline.h"
+#include "tandem/synthetic_input.h"
 #include "tandem/types.h"
 #include "tandem_hal/input_scanner.h"
 
@@ -27,8 +27,6 @@ constexpr uint32_t kLedSynthIntervalMs = 250;
 constexpr uint32_t kLedLiveIntervalMs = 1000;
 constexpr uint8_t kBootButtonPin = 0;         // ESP32 BOOT/GPIO0 (active-low)
 constexpr uint32_t kButtonDebounceMs = 30;
-constexpr float kDefaultDeadzone = 0.05f;
-constexpr float kTwoPi = 6.28318530718f;
 
 constexpr const char* kDeviceName = "TANDEM-BLE-Stick";
 constexpr const char* kManufacturer = "T.A.N.D.E.M.";
@@ -77,52 +75,6 @@ tandem::StickState g_last_state = tandem::make_centered_state(tandem::kStateFlag
 bool g_boot_stable_pressed = false;
 bool g_boot_last_raw_pressed = false;
 uint32_t g_boot_last_change_ms = 0;
-
-tandem::StickInputConfig make_default_input_config(
-    const tandem::hal::InputScannerConfig& scanner_cfg) noexcept {
-  tandem::StickInputConfig cfg{};
-  for (uint8_t i = 0; i < tandem::kMaxAxes; ++i) {
-    if (scanner_cfg.axis_pins[i] >= 0) {
-      cfg.axes[i].calibration = tandem::AxisCalibration{};
-      cfg.axes[i].deadzone = kDefaultDeadzone;
-      cfg.axes[i].curve = tandem::make_linear_curve();
-      cfg.axes[i].invert = false;
-      cfg.axes[i].enabled = true;
-    }
-  }
-  return cfg;
-}
-
-int16_t sine_axis(float phase_rad) noexcept {
-  const float scaled = std::sin(phase_rad) * static_cast<float>(tandem::kAxisMax);
-  const long rounded = std::lround(scaled);
-  if (rounded < tandem::kAxisMin) {
-    return tandem::kAxisMin;
-  }
-  if (rounded > tandem::kAxisMax) {
-    return tandem::kAxisMax;
-  }
-  return static_cast<int16_t>(rounded);
-}
-
-tandem::StickState make_synthetic_state(uint32_t now_ms) noexcept {
-  tandem::StickState state = tandem::make_centered_state(tandem::kStateFlagConnected);
-
-  // 4-second full sweep period; phase-offset each of the 8 axes for clear visibility.
-  const float base_phase =
-      kTwoPi * (static_cast<float>(now_ms % 4000U) / 4000.0f);
-  for (uint8_t i = 0; i < tandem::kMaxAxes; ++i) {
-    const float offset =
-        static_cast<float>(i) * (kTwoPi / static_cast<float>(tandem::kMaxAxes));
-    state.axes[i] = sine_axis(base_phase + offset);
-  }
-
-  // Cycle through all 32 buttons (250 ms each) and 8-way POV hat 0..8 (500 ms each).
-  const uint8_t btn_idx = static_cast<uint8_t>((now_ms / 250U) % 32U);
-  state.buttons = (uint32_t{1} << btn_idx);
-  state.hat = static_cast<uint8_t>((now_ms / 500U) % 9U);
-  return state;
-}
 
 void setup_ble_hid() {
   BLEDevice::init(kDeviceName);
@@ -198,7 +150,7 @@ void setup() {
 
   g_scanner_config = tandem::board::make_default_scanner_config();
   g_scanner.init(g_scanner_config);
-  g_input_config = make_default_input_config(g_scanner_config);
+  g_input_config = tandem::hal::make_default_input_config(g_scanner_config);
 
   Serial.begin(115200);
   delay(200);
@@ -242,7 +194,7 @@ void loop() {
     // Sample continuously even while disconnected so debounce state and first
     // post-reconnect report are always fresh (never stale pre-disconnect values).
     if (g_synthetic_enabled) {
-      g_last_state = make_synthetic_state(now_ms);
+      g_last_state = tandem::make_synthetic_stick_state(now_ms);
     } else {
       g_scanner.sample(now_ms, g_last_raw);
       g_last_state = tandem::process_stick_input(
