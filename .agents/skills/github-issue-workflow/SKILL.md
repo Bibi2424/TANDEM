@@ -30,7 +30,7 @@ Follow this procedure for every **Task** (and its parent **Feature**, if any) in
 2. **Ask permission** before committing, pushing, or opening the PR.
 3. Open the PR against `main` using `Closes #<task>` and `Part of #<feature>` (if applicable).
    - Do **not** merge the PR unless explicitly requested.
-4. Move the **Task** to **In review**.
+4. GitHub Project automation moves the linked **Task** to **In review** automatically when the PR is opened with `Closes #<task>`.
 
 ## 4. After the PR is Closed / Merged
 
@@ -41,6 +41,8 @@ A human closes/merges the PR and notifies the agent. Once notified:
    - **Remaining open tasks exist:** Move the parent Feature back to **Ready**.
    - **No remaining open tasks:** **Ask the user** whether the parent Feature should be moved to **Done**.
 
-## Tooling Note
+## Tooling Note (Project Board Status)
 
-- If GitHub Projects v2 MCP tools (or `gh` CLI) are not available in the active environment to update Project board status columns directly, explicitly list the required status transitions for the user to apply (or prompt to enable the `projects` MCP toolset).
+- Updating **Ready / In progress / In review / Done** requires **GitHub Projects v2** access (either the `projects` MCP toolset on the `github` MCP server or `gh` CLI with `project` scope).
+- Note that `issue_write` and `list_issue_fields` only manage **repository-level** issue fields/assignees/labels, **not** GitHub Projects v2 board columns.
+- If neither Projects v2 MCP tools nor `gh` CLI are available in the active environment, the agent **cannot** move cards on the Project board itself — it must state the exact reason (missing Projects v2 tooling) and explicitly list the required board status transitions for the user to apply (or prompt to enable the `projects` MCP toolset / install `gh`).
