@@ -4,6 +4,7 @@
 #include "boards/board_config.h"
 #include "stick_mode.h"
 #include "stick_transport.h"
+#include "tandem/config_protocol.h"
 #include "tandem/input_pipeline.h"
 #include "tandem/synthetic_input.h"
 #include "tandem/types.h"
@@ -51,6 +52,7 @@ constexpr uint8_t kEspNowChannel = static_cast<uint8_t>(TANDEM_ESPNOW_CHANNEL);
 constexpr uint8_t kPeerMac[6] = TANDEM_ESPNOW_PEER_MAC;
 
 constexpr uint32_t kStatusIntervalMs = 2000;
+constexpr uint32_t kLiveStreamIntervalMs = 33;
 constexpr uint32_t kLedSynthIntervalMs = 250;
 constexpr uint32_t kLedLiveIntervalMs = 1000;
 constexpr uint32_t kButtonDebounceMs = 30;
@@ -83,8 +85,14 @@ bool g_synthetic_enabled = false;
 
 uint32_t g_last_tx_us = 0;
 uint32_t g_last_status_ms = 0;
+uint32_t g_last_live_ms = 0;
 uint32_t g_last_led_ms = 0;
 bool g_led_state = false;
+bool g_live_streaming = false;
+
+char g_cmd_buf[tandem::config::kMaxCommandLength]{};
+size_t g_cmd_len = 0;
+bool g_cmd_reading_line = false;
 
 tandem::RawStickInput g_last_raw{};
 tandem::StickState g_last_state =
@@ -152,9 +160,89 @@ void switch_transport_mode(StickTransportMode target) noexcept {
   }
 }
 
+tandem::config::DeviceCapabilities build_capabilities() noexcept {
+  tandem::config::DeviceCapabilities caps{};
+  caps.board = tandem::board::kBoardName;
+  caps.stick_id = g_stick_id;
+  caps.transport_mode = tandem::stick::mode_name(g_mode);
+  caps.synthetic = g_synthetic_enabled;
+  caps.adc_max = (1L << g_scanner_config.adc_bits) - 1L;
+
+  uint8_t axes_mask = 0;
+  for (uint8_t i = 0; i < tandem::kMaxAxes; ++i) {
+    if (g_scanner_config.axis_pins[i] >= 0) {
+      axes_mask |= static_cast<uint8_t>(1u << i);
+    }
+  }
+  caps.axes_mask = axes_mask;
+
+  uint32_t btns_mask = 0;
+  for (uint8_t i = 0; i < tandem::hal::kMaxButtons; ++i) {
+    if (g_scanner_config.button_pins[i] >= 0) {
+      btns_mask |= (1UL << i);
+    }
+  }
+  caps.buttons_mask = btns_mask;
+
+  bool has_hat = false;
+  for (uint8_t i = 0; i < tandem::hal::kHatPinCount; ++i) {
+    if (g_scanner_config.hat_pins[i] >= 0) {
+      has_hat = true;
+      break;
+    }
+  }
+  caps.has_hat = has_hat;
+  return caps;
+}
+
+void handle_config_line(const char* line) noexcept {
+  tandem::config::ConfigCallbacks cbs{};
+  cbs.on_live_changed = [](void*, bool enabled) {
+    g_live_streaming = enabled;
+    g_last_live_ms = millis();
+  };
+  cbs.on_reset = [](void*) -> bool {
+    g_input_config = tandem::hal::make_default_input_config(g_scanner_config);
+    return true;
+  };
+  // Note: `on_save` remains nullptr until #33 wires ESP32 NVS persistence.
+
+  char resp[tandem::config::kMaxResponseLength]{};
+  const size_t n = tandem::config::process_command(
+      line, build_capabilities(), g_input_config, cbs, resp, sizeof(resp));
+  if (n > 0) {
+    Serial.print(resp);
+  }
+}
+
 void poll_controls(uint32_t now_ms) noexcept {
   while (Serial.available() > 0) {
     const int ch = Serial.read();
+    if (g_cmd_reading_line) {
+      if (ch == '\r' || ch == '\n') {
+        g_cmd_buf[g_cmd_len] = '\0';
+        g_cmd_reading_line = false;
+        g_cmd_len = 0;
+        handle_config_line(g_cmd_buf);
+      } else if (g_cmd_len + 1 < sizeof(g_cmd_buf)) {
+        g_cmd_buf[g_cmd_len++] = static_cast<char>(ch);
+      } else {
+        g_cmd_reading_line = false;
+        g_cmd_len = 0;
+        Serial.printf("%s{\"v\":%u,\"cmd\":\"unknown\",\"ok\":false,\"err\":\"line_too_long\"}\n",
+                      tandem::config::kResponsePrefix,
+                      static_cast<unsigned>(tandem::config::kProtocolVersion));
+      }
+      continue;
+    }
+
+    if (ch == '$') {
+      g_cmd_reading_line = true;
+      g_cmd_buf[0] = '$';
+      g_cmd_len = 1;
+      continue;
+    }
+
     if (ch == 't' || ch == 'T') {
       g_synthetic_enabled = !g_synthetic_enabled;
       Serial.printf("[stick] input -> %s\n",
@@ -328,7 +416,17 @@ void loop() {
     }
   }
 
-  if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {
+  if (g_live_streaming) {
+    if (static_cast<uint32_t>(now_ms - g_last_live_ms) >= kLiveStreamIntervalMs) {
+      g_last_live_ms = now_ms;
+      char resp[tandem::config::kMaxResponseLength]{};
+      const size_t n = tandem::config::format_live_response(
+          g_last_raw, g_last_state, g_synthetic_enabled, resp, sizeof(resp));
+      if (n > 0) {
+        Serial.print(resp);
+      }
+    }
+  } else if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {
     g_last_status_ms = now_ms;
     print_status(now_ms);
   }
