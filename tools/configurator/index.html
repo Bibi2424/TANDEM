@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>T.A.N.D.E.M. Stick Configurator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>T.A.N.D.E.M. Configurator</h1>
+      <span class="subtitle">WebSerial Calibration &amp; Input Shaping</span>
+    </div>
+    <div class="actions">
+      <button id="btn-connect" class="btn btn-primary">Connect Stick (USB)</button>
+      <button id="btn-disconnect" class="btn btn-secondary" disabled>Disconnect</button>
+      <button id="btn-reset" class="btn btn-secondary" disabled>Reset Defaults</button>
+      <button id="btn-save" class="btn btn-accent" disabled>Save to Flash</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="banner-unsupported" class="banner banner-warn hidden">
+      WebSerial is not supported in this browser. Open this page in desktop <strong>Chrome</strong> or <strong>Edge</strong>.
+    </div>
+    <div id="status-toast" class="banner hidden"></div>
+
+    <section id="device-panel" class="card device-bar">
+      <div class="badge-group">
+        <span class="badge">Status: <strong id="val-status">Disconnected</strong></span>
+        <span class="badge">Board: <strong id="val-board">—</strong></span>
+        <span class="badge">Role: <strong id="val-role">—</strong></span>
+        <span class="badge">Mode: <strong id="val-mode">—</strong></span>
+        <span class="badge">Input: <strong id="val-input">—</strong></span>
+      </div>
+      <label class="toggle-inline">
+        <input type="checkbox" id="chk-show-all-axes" />
+        Show all 8 axis slots
+      </label>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <h2>Axes &amp; Calibration</h2>
+        <div class="wizard-controls">
+          <button id="btn-center-all" class="btn btn-secondary" disabled>Capture Center (All)</button>
+          <button id="btn-sweep-all" class="btn btn-secondary" disabled>Start Min/Max Sweep</button>
+          <button id="btn-apply-all" class="btn btn-primary" disabled>Apply All Axes</button>
+        </div>
+      </div>
+      <div id="axes-grid" class="axes-grid">
+        <p class="muted">Connect a T.A.N.D.E.M. stick over USB to inspect and calibrate axes.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Buttons &amp; POV Hat</h2>
+      <div id="digital-panel" class="digital-panel">
+        <div id="hat-box" class="hat-box hidden">
+          <span class="label">POV Hat</span>
+          <strong id="val-hat">Centered (0)</strong>
+        </div>
+        <div id="buttons-grid" class="buttons-grid"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
