@@ -27,6 +27,7 @@ class TandemUsbJoystick final : public USBHIDDevice {
 
 class UsbHidTransport final : public StickTransport {
  public:
+  static void configure_usb_identity() noexcept;
   void init_usb_stack() noexcept;
 
   uint32_t interval_us() const noexcept override { return 1000; }  // 1000 Hz USB HID

@@ -12,6 +12,18 @@
 #include "transport_espnow_tx.h"
 #include "transport_usb_hid.h"
 
+#if TANDEM_CAP_NATIVE_USB && !ARDUINO_USB_CDC_ON_BOOT
+#include <USB.h>
+#include <USBCDC.h>
+namespace {
+USBCDC g_usb_serial;
+}  // namespace
+#ifdef Serial
+#undef Serial
+#endif
+#define Serial g_usb_serial
+#endif
+
 #ifndef TANDEM_STICK_ID
 #define TANDEM_STICK_ID 1
 #endif
@@ -240,8 +252,15 @@ void setup() {
   g_espnow_transport.configure(kEspNowChannel, kPeerMac);
 #endif
 
+#if TANDEM_CAP_NATIVE_USB
+  tandem::stick::UsbHidTransport::configure_usb_identity();
+#endif
+
   Serial.begin(115200);
 #if TANDEM_CAP_NATIVE_USB
+#if !ARDUINO_USB_CDC_ON_BOOT
+  USB.begin();
+#endif
   const uint32_t wait_start_ms = millis();
   while (!Serial && static_cast<uint32_t>(millis() - wait_start_ms) < kUsbSerialWaitMs) {
     delay(10);

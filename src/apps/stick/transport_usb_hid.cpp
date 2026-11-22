@@ -3,9 +3,11 @@
 #if TANDEM_CAP_NATIVE_USB
 
 #include <USB.h>
+#include <esp_mac.h>
 #include <cstdio>
 #include <cstring>
 
+#include "tandem/device_name.h"
 #include "tandem/hid_report.h"
 
 namespace tandem::stick {
@@ -39,8 +41,26 @@ uint16_t TandemUsbJoystick::_onGetDescriptor(uint8_t* buffer) {
   return static_cast<uint16_t>(tandem::kHidJoystickReportDescriptorBytes);
 }
 
+void UsbHidTransport::configure_usb_identity() noexcept {
+  static bool configured = false;
+  if (configured) {
+    return;
+  }
+  configured = true;
+
+  static char product_name[32]{};
+  uint8_t mac[6]{};
+  if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+    std::memset(mac, 0, sizeof(mac));
+  }
+  tandem::format_device_name(product_name, sizeof(product_name), "TANDEM-Stick", mac);
+  USB.productName(product_name);
+  USB.manufacturerName("T.A.N.D.E.M.");
+}
+
 void UsbHidTransport::init_usb_stack() noexcept {
   if (!stack_initialized_) {
+    configure_usb_identity();
     joystick_.begin();
     USB.begin();
     stack_initialized_ = true;

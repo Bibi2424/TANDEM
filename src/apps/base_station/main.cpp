@@ -1,8 +1,20 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <WiFi.h>
+#include <esp_mac.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+
+#if !ARDUINO_USB_CDC_ON_BOOT
+#include <USBCDC.h>
+namespace {
+USBCDC g_usb_serial;
+}  // namespace
+#ifdef Serial
+#undef Serial
+#endif
+#define Serial g_usb_serial
+#endif
 
 #include <atomic>
 #include <cstdint>
@@ -10,6 +22,7 @@
 
 #include "boards/board_config.h"
 #include "esp32-hal-tinyusb.h"
+#include "tandem/device_name.h"
 #include "tandem/espnow_packet.h"
 #include "tandem/failsafe.h"
 #include "tandem/hid_report.h"
@@ -235,10 +248,17 @@ void setup() {
   g_monitors[0].set_config(fs_cfg);
   g_monitors[1].set_config(fs_cfg);
 
+  static char product_name[32]{};
+  uint8_t base_mac[6]{};
+  if (esp_efuse_mac_get_default(base_mac) != ESP_OK) {
+    std::memset(base_mac, 0, sizeof(base_mac));
+  }
+  tandem::format_device_name(product_name, sizeof(product_name), "TANDEM-Base", base_mac);
+
   USB.VID(kUsbVid);
   USB.PID(kUsbPid);
   USB.manufacturerName("T.A.N.D.E.M.");
-  USB.productName(kHidInterfaceName);
+  USB.productName(product_name);
   USB.begin();
 
   const bool espnow_ok = setup_espnow_rx();
