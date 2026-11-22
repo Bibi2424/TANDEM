@@ -72,6 +72,20 @@ pio run -e esp32_s2_stick -t upload
 pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
 ```
 
+### Local Port Overrides (`platformio_local.ini`)
+
+`platformio.ini` includes an optional, gitignored `platformio_local.ini` via `extra_configs`. Create it in the repo root to pin machine-specific `upload_port` / `monitor_port` values per environment when multiple boards are connected:
+
+```ini
+[env:esp32_wroom_stick]
+upload_port = COM7
+monitor_port = COM7
+
+[env:esp32_wroom_stick_right]
+upload_port = COM12
+monitor_port = COM12
+```
+
 ### Editor / LSP Setup (`clangd`)
 
 To get accurate C++ IntelliSense in editors using `clangd`:

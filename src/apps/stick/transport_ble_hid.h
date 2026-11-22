@@ -28,9 +28,12 @@ class BleHidTransport final : public StickTransport {
   static void on_disconnect_cb() noexcept;
 
  private:
+  bool init_ble_stack() noexcept;
+
   static std::atomic<bool> ble_connected_;
   static std::atomic<bool> ble_restart_adv_;
 
+  bool stack_initialized_{false};
   bool active_{false};
   uint32_t sent_{0};
 };

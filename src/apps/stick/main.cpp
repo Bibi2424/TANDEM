@@ -110,10 +110,15 @@ StickTransport* transport_for_mode(StickTransportMode mode) noexcept {
 
 void switch_transport_mode(StickTransportMode target) noexcept {
   if (!tandem::stick::is_mode_supported(target)) {
+    Serial.printf("[stick] ERROR: mode %s is not supported on %s\n",
+                  tandem::stick::mode_name(target),
+                  tandem::board::kBoardName);
     return;
   }
   // Allow retrying the same mode if its previous start() failed.
   if (target == g_mode && g_transport != nullptr && g_transport->is_active()) {
+    Serial.printf("[stick] already in mode %s\n",
+                  tandem::stick::mode_name(g_mode));
     return;
   }
   // Strict mutual exclusion: tear down the current transport (including BLE/Wi-Fi radio)
@@ -126,9 +131,13 @@ void switch_transport_mode(StickTransportMode target) noexcept {
   g_transport = transport_for_mode(g_mode);
   const bool ok = (g_transport != nullptr) && g_transport->start();
   g_last_tx_us = micros();
-  Serial.printf("[stick] mode -> %s (%s)\n",
-                tandem::stick::mode_name(g_mode),
-                ok ? "ok" : "FAILED");
+  if (ok) {
+    Serial.printf("[stick] mode -> %s (ok)\n",
+                  tandem::stick::mode_name(g_mode));
+  } else {
+    Serial.printf("[stick] ERROR: failed to start mode %s\n",
+                  tandem::stick::mode_name(g_mode));
+  }
 }
 
 void poll_controls(uint32_t now_ms) noexcept {
@@ -154,6 +163,9 @@ void poll_controls(uint32_t now_ms) noexcept {
       }
       Serial.printf("[stick] id -> %s\n",
                     (g_stick_id == tandem::StickId::Left) ? "LEFT" : "RIGHT");
+    } else if (ch != '\r' && ch != '\n') {
+      Serial.printf("[stick] ERROR: unknown command '%c' (use t/m/1/2/3/i)\n",
+                    (ch >= 32 && ch < 127) ? static_cast<char>(ch) : '?');
     }
   }
 

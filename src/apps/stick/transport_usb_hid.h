@@ -18,7 +18,7 @@ class TandemUsbJoystick final : public USBHIDDevice {
 
   void begin();
   bool ready() const;
-  bool send(const tandem::StickState& state);
+  bool send(const tandem::StickState& state, uint32_t timeout_ms = 1);
   uint16_t _onGetDescriptor(uint8_t* buffer) override;
 
  private:

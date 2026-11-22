@@ -23,13 +23,13 @@ void TandemUsbJoystick::begin() { hid_.begin(); }
 
 bool TandemUsbJoystick::ready() const { return hid_.ready(); }
 
-bool TandemUsbJoystick::send(const tandem::StickState& state) {
+bool TandemUsbJoystick::send(const tandem::StickState& state, uint32_t timeout_ms) {
   if (!hid_.ready()) {
     return false;
   }
   const tandem::HidJoystickReport report = tandem::encode_hid_joystick_report(state);
   return hid_.SendReport(
-      tandem::kHidReportIdJoystick, report.bytes, sizeof(report.bytes), 1);
+      tandem::kHidReportIdJoystick, report.bytes, sizeof(report.bytes), timeout_ms);
 }
 
 uint16_t TandemUsbJoystick::_onGetDescriptor(uint8_t* buffer) {
@@ -56,8 +56,13 @@ bool UsbHidTransport::start() noexcept {
 void UsbHidTransport::stop() noexcept {
   if (active_) {
     // Release all buttons/axes on the host before pausing HID reports so USB CDC stays alive
-    // without leaving stale held inputs.
-    joystick_.send(tandem::make_centered_state(0));
+    // without leaving stale held inputs. Wait briefly for any in-flight 1 kHz report to clear.
+    const tandem::StickState centered = tandem::make_centered_state(0);
+    const uint32_t start_ms = millis();
+    while (!joystick_.send(centered, 20) &&
+           static_cast<uint32_t>(millis() - start_ms) < 50U) {
+      delay(1);
+    }
   }
   active_ = false;
 }

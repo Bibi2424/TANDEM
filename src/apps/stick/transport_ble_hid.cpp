@@ -46,13 +46,10 @@ void BleHidTransport::on_disconnect_cb() noexcept {
   ble_restart_adv_.store(true, std::memory_order_release);
 }
 
-bool BleHidTransport::start() noexcept {
-  if (active_) {
+bool BleHidTransport::init_ble_stack() noexcept {
+  if (stack_initialized_) {
     return true;
   }
-
-  ble_connected_.store(false, std::memory_order_release);
-  ble_restart_adv_.store(false, std::memory_order_release);
 
   if (!BLEDevice::init(kDeviceName)) {
     return false;
@@ -110,8 +107,24 @@ bool BleHidTransport::start() noexcept {
   advertising->addServiceUUID(g_hid->hidService()->getUUID());
   advertising->setScanResponse(true);
   advertising->setMinPreferred(0x06);
-  BLEDevice::startAdvertising();
 
+  stack_initialized_ = true;
+  return true;
+}
+
+bool BleHidTransport::start() noexcept {
+  if (active_) {
+    return true;
+  }
+
+  ble_connected_.store(false, std::memory_order_release);
+  ble_restart_adv_.store(false, std::memory_order_release);
+
+  if (!init_ble_stack()) {
+    return false;
+  }
+
+  BLEDevice::startAdvertising();
   active_ = true;
   return true;
 }
@@ -124,13 +137,12 @@ void BleHidTransport::stop() noexcept {
   if (advertising != nullptr) {
     advertising->stop();
   }
+  BLEServer* server = BLEDevice::getServer();
+  if (server != nullptr && ble_connected_.load(std::memory_order_acquire)) {
+    server->disconnect(server->getConnId());
+  }
   ble_connected_.store(false, std::memory_order_release);
   ble_restart_adv_.store(false, std::memory_order_release);
-  g_input_report = nullptr;
-  delete g_hid;
-  g_hid = nullptr;
-  // Pass false so BT memory is preserved if the user switches back to BLE later.
-  BLEDevice::deinit(false);
   active_ = false;
 }
 
