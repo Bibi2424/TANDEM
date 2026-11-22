@@ -10,16 +10,21 @@
 // - Analog: ADC1 only (GPIO32-GPIO39; GPIO34-GPIO39 are input-only with no internal pull-ups)
 // - Avoid SPI flash pins (GPIO6-GPIO11) and strapping pins (GPIO0, GPIO2, GPIO5, GPIO12, GPIO15).
 
+#define TANDEM_CAP_NATIVE_USB 0
+#define TANDEM_CAP_BLE 1
+#define TANDEM_CAP_ESPNOW 1
+
 namespace tandem::board {
 
 inline constexpr const char* kBoardName = "ESP32-WROOM";
-inline constexpr bool kHasNativeUsb = false;
-inline constexpr bool kHasBle = true;
-inline constexpr bool kHasEspNow = true;
+inline constexpr bool kHasNativeUsb = (TANDEM_CAP_NATIVE_USB != 0);
+inline constexpr bool kHasBle = (TANDEM_CAP_BLE != 0);
+inline constexpr bool kHasEspNow = (TANDEM_CAP_ESPNOW != 0);
 inline constexpr uint8_t kAdcBits = 12;
 
 // Onboard status LED on classic ESP32 devkits (typically GPIO2); -1 if absent.
 inline constexpr int8_t kPinStatusLed = 2;
+inline constexpr uint8_t kPinBootButton = 0;  // Active-low BOOT/GPIO0 button
 
 // Tentative ADC1 axis pins — confirm against physical wiring before use.
 inline constexpr uint8_t kPinAxisX = 34;

@@ -10,12 +10,16 @@
 // - Analog: Prefer ADC1 (GPIO1-GPIO10), avoiding strapping pin GPIO3
 // - Avoid strapping pins (GPIO0, GPIO3, GPIO45, GPIO46).
 
+#define TANDEM_CAP_NATIVE_USB 1
+#define TANDEM_CAP_BLE 1
+#define TANDEM_CAP_ESPNOW 1
+
 namespace tandem::board {
 
 inline constexpr const char* kBoardName = "ESP32-S3";
-inline constexpr bool kHasNativeUsb = true;
-inline constexpr bool kHasBle = true;
-inline constexpr bool kHasEspNow = true;
+inline constexpr bool kHasNativeUsb = (TANDEM_CAP_NATIVE_USB != 0);
+inline constexpr bool kHasBle = (TANDEM_CAP_BLE != 0);
+inline constexpr bool kHasEspNow = (TANDEM_CAP_ESPNOW != 0);
 inline constexpr uint8_t kAdcBits = 12;
 
 // Tentative ADC1 axis pins — confirm against physical dev-board breakout before use.
@@ -26,6 +30,7 @@ inline constexpr uint8_t kPinAxisThrottle = 5;
 
 // Status LED varies by ESP32-S3 devkit (e.g. addressable RGB vs none); disabled by default.
 inline constexpr int8_t kPinStatusLed = -1;
+inline constexpr uint8_t kPinBootButton = 0;  // Active-low BOOT/GPIO0 button
 
 // Tentative active-low button pins (with internal pull-ups).
 inline constexpr uint8_t kPinButton0 = 6;

@@ -3,6 +3,7 @@
 .pioenvs/
 .piolibdeps/
 compile_commands.json
+platformio_local.ini
 
 # Arduino / C / C++ build output
 build/
