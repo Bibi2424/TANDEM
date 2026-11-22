@@ -7,17 +7,20 @@
 #include <BLEHIDDevice.h>
 #include <BLESecurity.h>
 #include <BLEServer.h>
+#include <esp_mac.h>
 
 #include <cstdio>
 #include <cstring>
 
+#include "tandem/device_name.h"
 #include "tandem/hid_report.h"
 
 namespace tandem::stick {
 
 namespace {
 
-constexpr const char* kDeviceName = "TANDEM-BLE-Stick";
+constexpr const char* kDeviceNamePrefix = "TANDEM-BLE";
+constexpr size_t kMaxDeviceNameBytes = 32;
 constexpr const char* kManufacturer = "T.A.N.D.E.M.";
 constexpr uint16_t kBleMtuBytes = 64;
 
@@ -51,7 +54,14 @@ bool BleHidTransport::init_ble_stack() noexcept {
     return true;
   }
 
-  if (!BLEDevice::init(kDeviceName)) {
+  uint8_t mac[6]{};
+  if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+    std::memset(mac, 0, sizeof(mac));
+  }
+  char device_name[kMaxDeviceNameBytes]{};
+  tandem::format_device_name(device_name, sizeof(device_name), kDeviceNamePrefix, mac);
+
+  if (!BLEDevice::init(device_name)) {
     return false;
   }
   BLEDevice::setMTU(kBleMtuBytes);
