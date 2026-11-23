@@ -7,12 +7,6 @@
 [![Build: PlatformIO](https://img.shields.io/badge/Build-PlatformIO-orange.svg)](platformio.ini)
 [![Web Configurator](https://img.shields.io/badge/Configurator-Open%20Web%20App-2ea44f?logo=googlechrome&logoColor=white)](https://bibi2424.github.io/TANDEM/)
 
-> [!TIP]
-> ### T.A.N.D.E.M. Web Configurator
-> **[Open Live Configurator (`bibi2424.github.io/TANDEM`)](https://bibi2424.github.io/TANDEM/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (WebSerial)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
->
-> Testing local edits before merging? Run `python tools/configurator/serve.py` and open `http://localhost:8000/`.
-
 A DIY dual-joystick (HOSAS) controller system built around a portable, hardware-independent C++17 core (`tandem_core`) so connectivity modes can be explored independently and moved across microcontrollers without rewriting input math.
 
 ---
@@ -56,6 +50,10 @@ TANDEM/
 ---
 
 ## Getting Started
+
+> [!TIP]
+> **T.A.N.D.E.M. Web Configurator:** **[Open Live Configurator (`bibi2424.github.io/TANDEM`)](https://bibi2424.github.io/TANDEM/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (WebSerial)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
+> Testing local edits? Run `python tools/configurator/serve.py` and open `http://localhost:8000/`.
 
 ### Prerequisites
 
