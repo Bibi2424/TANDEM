@@ -58,12 +58,15 @@ bool BleHidTransport::init_ble_stack() noexcept {
   if (esp_efuse_mac_get_default(mac) != ESP_OK) {
     std::memset(mac, 0, sizeof(mac));
   }
-  char device_name[kMaxDeviceNameBytes]{};
-  tandem::format_device_name(device_name, sizeof(device_name), kDeviceNamePrefix, mac);
+  tandem::format_device_name(
+      device_name_, sizeof(device_name_), kDeviceNamePrefix, mac);
 
-  if (!BLEDevice::init(device_name)) {
+  if (!BLEDevice::init(device_name_)) {
     return false;
   }
+#if defined(CONFIG_NIMBLE_ENABLED)
+  BLEDevice::setOwnAddrType(BLE_OWN_ADDR_PUBLIC);
+#endif
   BLEDevice::setMTU(kBleMtuBytes);
 
   BLESecurity::setAuthenticationMode(true, false, true);
@@ -150,6 +153,13 @@ void BleHidTransport::stop() noexcept {
   BLEServer* server = BLEDevice::getServer();
   if (server != nullptr && ble_connected_.load(std::memory_order_acquire)) {
     server->disconnect(server->getConnId());
+  }
+  if (stack_initialized_) {
+    delete g_hid;
+    g_hid = nullptr;
+    g_input_report = nullptr;
+    BLEDevice::deinit(false);
+    stack_initialized_ = false;
   }
   ble_connected_.store(false, std::memory_order_release);
   ble_restart_adv_.store(false, std::memory_order_release);

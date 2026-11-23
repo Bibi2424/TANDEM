@@ -5,6 +5,7 @@
 [![CI](https://github.com/Bibi2424/TANDEM/actions/workflows/ci.yml/badge.svg)](https://github.com/Bibi2424/TANDEM/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Build: PlatformIO](https://img.shields.io/badge/Build-PlatformIO-orange.svg)](platformio.ini)
+[![Web Configurator](https://img.shields.io/badge/Configurator-Open%20Web%20App-2ea44f?logo=googlechrome&logoColor=white)](https://bibi2424.github.io/TANDEM/)
 
 A DIY dual-joystick (HOSAS) controller system built around a portable, hardware-independent C++17 core (`tandem_core`) so connectivity modes can be explored independently and moved across microcontrollers without rewriting input math.
 
@@ -39,7 +40,7 @@ TANDEM/
 ├── include/boards/            # Per-board capability flags and ADC1/GPIO pinmaps
 ├── lib/tandem_core/           # Pure, dependency-free C++17 core library (host-testable)
 ├── src/apps/                  # Standalone firmware apps selected via build_src_filter
-├── tools/configurator/        # Zero-build WebSerial browser configurator (GitHub Pages)
+├── tools/configurator/        # Zero-build WebSerial & Web Bluetooth configurator (GitHub Pages)
 ├── test/                      # Native host Unity unit tests (core, axis shaping, input pipeline)
 ├── platformio.ini             # PlatformIO environments (native, ESP32-WROOM, ESP32-S2, ESP32-S3)
 ├── AGENTS.md                  # Repository development & coding conventions
@@ -49,6 +50,11 @@ TANDEM/
 ---
 
 ## Getting Started
+
+> [!TIP]
+> **T.A.N.D.E.M. Web Configurator:** **[Open Live Configurator (`bibi2424.github.io/TANDEM`)](https://bibi2424.github.io/TANDEM/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (WebSerial)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
+> For **BLE**, switch the stick to `BLE_CFG` (`'4'` on serial or `BOOT` long-press) and click **Connect BLE** directly in Chrome/Edge — **do not** pair `TANDEM-CFG-...` in Windows Bluetooth Settings.
+> Testing local edits? Run `python tools/configurator/serve.py` and open `http://localhost:8000/`.
 
 ### Prerequisites
 
@@ -74,6 +80,9 @@ pio run -e esp32_s3_base_station
 # Flash and open the serial console (115200 baud)
 pio run -e esp32_s2_stick -t upload
 pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
+
+# Serve the Web Configurator locally for Chrome/Edge testing (WebSerial & Web Bluetooth)
+python tools/configurator/serve.py
 ```
 
 ### Local Port Overrides (`platformio_local.ini`)

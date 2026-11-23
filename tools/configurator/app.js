@@ -2,6 +2,11 @@
   "use strict";
 
   const RESPONSE_PREFIX = "@TANDEM ";
+  const BLE_SERVICE_UUID = "7a4e0001-6f72-4d61-9c2a-54414e44454d";
+  const BLE_CMD_CHAR_UUID = "7a4e0002-6f72-4d61-9c2a-54414e44454d";
+  const BLE_RESP_CHAR_UUID = "7a4e0003-6f72-4d61-9c2a-54414e44454d";
+  const BLE_LIVE_CHAR_UUID = "7a4e0004-6f72-4d61-9c2a-54414e44454d";
+  const BLE_WRITE_CHUNK_BYTES = 20;
   const AXIS_NAMES = ["X", "Y", "Z", "Rx", "Ry", "Rz", "Slider", "Dial"];
   const HAT_LABELS = ["Centered", "N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
@@ -9,6 +14,7 @@
     unsupported: document.getElementById("banner-unsupported"),
     toast: document.getElementById("status-toast"),
     btnConnect: document.getElementById("btn-connect"),
+    btnConnectBle: document.getElementById("btn-connect-ble"),
     btnDisconnect: document.getElementById("btn-disconnect"),
     btnReset: document.getElementById("btn-reset"),
     btnSave: document.getElementById("btn-save"),
@@ -133,6 +139,156 @@
     }
   }
 
+  class BleTransport {
+    constructor(onMessage, onDisconnect) {
+      this.onMessage = onMessage;
+      this.onDisconnect = onDisconnect;
+      this.device = null;
+      this.server = null;
+      this.cmdChar = null;
+      this.respChar = null;
+      this.liveChar = null;
+      this.pending = new Map();
+      this.closing = false;
+      this.respBuf = "";
+      this.liveBuf = "";
+      this.decoder = new TextDecoder();
+      this.writeQueue = Promise.resolve();
+      this._onDisconnected = () => {
+        if (!this.closing) {
+          this._rejectPending("Disconnected");
+          this.onDisconnect();
+        }
+      };
+      this._onRespNotify = (ev) => {
+        this.respBuf = this._consumeChunk(this.respBuf, ev.target.value, true);
+      };
+      this._onLiveNotify = (ev) => {
+        this.liveBuf = this._consumeChunk(this.liveBuf, ev.target.value, false);
+      };
+    }
+
+    _rejectPending(reason) {
+      for (const [, waiter] of this.pending) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error(reason));
+      }
+      this.pending.clear();
+    }
+
+    _consumeChunk(buf, dataView, resolvePending) {
+      const text = this.decoder.decode(dataView, { stream: true });
+      let combined = buf + text;
+      let idx;
+      while ((idx = combined.indexOf("\n")) >= 0) {
+        const line = combined.slice(0, idx).replace(/\r$/, "");
+        combined = combined.slice(idx + 1);
+        if (line.startsWith(RESPONSE_PREFIX)) {
+          try {
+            const msg = JSON.parse(line.slice(RESPONSE_PREFIX.length));
+            if (resolvePending) {
+              const waiter = this.pending.get(msg.cmd);
+              if (waiter) {
+                clearTimeout(waiter.timer);
+                this.pending.delete(msg.cmd);
+                waiter.resolve(msg);
+              }
+            }
+            this.onMessage(msg);
+          } catch (_) {}
+        }
+      }
+      return combined;
+    }
+
+    async connect() {
+      this.closing = false;
+      this.respBuf = "";
+      this.liveBuf = "";
+      this.device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [BLE_SERVICE_UUID] }],
+      });
+      this.device.addEventListener("gattserverdisconnected", this._onDisconnected);
+      this.server = await this.device.gatt.connect();
+      const service = await this.server.getPrimaryService(BLE_SERVICE_UUID);
+      this.cmdChar = await service.getCharacteristic(BLE_CMD_CHAR_UUID);
+      this.respChar = await service.getCharacteristic(BLE_RESP_CHAR_UUID);
+      this.liveChar = await service.getCharacteristic(BLE_LIVE_CHAR_UUID);
+
+      this.respChar.addEventListener("characteristicvaluechanged", this._onRespNotify);
+      this.liveChar.addEventListener("characteristicvaluechanged", this._onLiveNotify);
+      await this.respChar.startNotifications();
+      await this.liveChar.startNotifications();
+    }
+
+    async disconnect() {
+      this.closing = true;
+      this._rejectPending("Disconnected");
+      try {
+        if (this.respChar) {
+          this.respChar.removeEventListener("characteristicvaluechanged", this._onRespNotify);
+          await this.respChar.stopNotifications();
+        }
+      } catch (_) {}
+      try {
+        if (this.liveChar) {
+          this.liveChar.removeEventListener("characteristicvaluechanged", this._onLiveNotify);
+          await this.liveChar.stopNotifications();
+        }
+      } catch (_) {}
+      try {
+        if (this.device) {
+          this.device.removeEventListener("gattserverdisconnected", this._onDisconnected);
+          if (this.device.gatt && this.device.gatt.connected) {
+            this.device.gatt.disconnect();
+          }
+        }
+      } catch (_) {}
+      this.device = null;
+      this.server = null;
+      this.cmdChar = null;
+      this.respChar = null;
+      this.liveChar = null;
+    }
+
+    async sendCommand(cmdLine, expectedCmd, timeoutMs = 4000) {
+      if (!this.cmdChar) {
+        throw new Error("Not connected");
+      }
+      const encoded = new TextEncoder().encode(`$TANDEM ${cmdLine}\n`);
+      const promise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          this.pending.delete(expectedCmd);
+          reject(new Error(`Timeout waiting for '${expectedCmd}'`));
+        }, timeoutMs);
+        this.pending.set(expectedCmd, { resolve, reject, timer });
+      });
+
+      this.writeQueue = this.writeQueue.then(async () => {
+        for (let off = 0; off < encoded.length; off += BLE_WRITE_CHUNK_BYTES) {
+          const slice = encoded.slice(off, off + BLE_WRITE_CHUNK_BYTES);
+          if (this.cmdChar.properties.writeWithoutResponse) {
+            await this.cmdChar.writeValueWithoutResponse(slice);
+          } else {
+            await this.cmdChar.writeValueWithResponse(slice);
+          }
+        }
+      });
+
+      try {
+        await this.writeQueue;
+      } catch (err) {
+        const waiter = this.pending.get(expectedCmd);
+        if (waiter) {
+          clearTimeout(waiter.timer);
+          this.pending.delete(expectedCmd);
+        }
+        throw err;
+      }
+      return promise;
+    }
+  }
+
   const state = {
     connected: false,
     caps: null,
@@ -142,7 +298,11 @@
     sweepBounds: [],
   };
 
-  const transport = new SerialTransport(handleMessage, handleUnexpectedDisconnect);
+  const hasSerial = "serial" in navigator;
+  const hasBle = "bluetooth" in navigator;
+  const serialTransport = new SerialTransport(handleMessage, handleUnexpectedDisconnect);
+  const bleTransport = new BleTransport(handleMessage, handleUnexpectedDisconnect);
+  let transport = serialTransport;
 
   function showToast(text, kind = "ok") {
     els.toast.textContent = text;
@@ -155,7 +315,8 @@
 
   function setConnectedUi(connected) {
     state.connected = connected;
-    els.btnConnect.disabled = connected;
+    els.btnConnect.disabled = connected || !hasSerial;
+    els.btnConnectBle.disabled = connected || !hasBle;
     els.btnDisconnect.disabled = !connected;
     els.btnReset.disabled = !connected;
     els.btnSave.disabled = !connected;
@@ -382,8 +543,9 @@
     renderDigital();
   }
 
-  els.btnConnect.addEventListener("click", async () => {
+  async function connectWith(selectedTransport) {
     clearToast();
+    transport = selectedTransport;
     try {
       await transport.connect();
       setConnectedUi(true);
@@ -395,7 +557,10 @@
       setConnectedUi(false);
       showToast(`Connection failed: ${err.message}`, "err");
     }
-  });
+  }
+
+  els.btnConnect.addEventListener("click", () => connectWith(serialTransport));
+  els.btnConnectBle.addEventListener("click", () => connectWith(bleTransport));
 
   els.btnDisconnect.addEventListener("click", async () => {
     try {
@@ -471,8 +636,9 @@
 
   els.chkShowAllAxes.addEventListener("change", renderAxes);
 
-  if (!("serial" in navigator)) {
+  if (!hasSerial && !hasBle) {
     els.unsupported.classList.remove("hidden");
-    els.btnConnect.disabled = true;
   }
+  els.btnConnect.disabled = !hasSerial;
+  els.btnConnectBle.disabled = !hasBle;
 })();
