@@ -22,6 +22,9 @@ class BleConfigTransport final : public StickTransport {
   bool send(tandem::StickId stick_id,
             const tandem::StickState& state) noexcept override;
   void format_stats(char* out, size_t out_len) const noexcept override;
+  const char* device_name() const noexcept override {
+    return (device_name_[0] != '\0') ? device_name_ : nullptr;
+  }
 
   bool connected() const noexcept;
 
@@ -49,6 +52,7 @@ class BleConfigTransport final : public StickTransport {
   bool active_{false};
   uint32_t rx_cmds_{0};
   uint32_t tx_frames_{0};
+  char device_name_[32]{};
 };
 
 }  // namespace tandem::stick

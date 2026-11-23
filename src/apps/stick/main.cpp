@@ -163,8 +163,14 @@ void switch_transport_mode(StickTransportMode target) noexcept {
   const bool ok = (g_transport != nullptr) && g_transport->start();
   g_last_tx_us = micros();
   if (ok) {
-    Serial.printf("[stick] mode -> %s (ok)\n",
-                  tandem::stick::mode_name(g_mode));
+    if (g_transport->device_name() != nullptr) {
+      Serial.printf("[stick] mode -> %s (%s, ok)\n",
+                    tandem::stick::mode_name(g_mode),
+                    g_transport->device_name());
+    } else {
+      Serial.printf("[stick] mode -> %s (ok)\n",
+                    tandem::stick::mode_name(g_mode));
+    }
   } else {
     Serial.printf("[stick] ERROR: failed to start mode %s\n",
                   tandem::stick::mode_name(g_mode));
@@ -417,6 +423,9 @@ void setup() {
   Serial.printf("Mode       : %s (%s)\n",
                 tandem::stick::mode_name(g_mode),
                 ok ? "ok" : "FAILED");
+  if (ok && g_transport != nullptr && g_transport->device_name() != nullptr) {
+    Serial.printf("BLE Name   : %s\n", g_transport->device_name());
+  }
   Serial.printf("Stick ID   : %s\n",
                 (g_stick_id == tandem::StickId::Left) ? "LEFT (1)" : "RIGHT (2)");
   Serial.printf("Input      : %s\n", g_synthetic_enabled ? "SYNTHETIC" : "LIVE");

@@ -151,13 +151,26 @@ bool BleConfigTransport::init_ble_stack() noexcept {
   if (esp_efuse_mac_get_default(mac) != ESP_OK) {
     std::memset(mac, 0, sizeof(mac));
   }
-  char device_name[kMaxDeviceNameBytes]{};
   tandem::format_device_name(
-      device_name, sizeof(device_name), kConfigDeviceNamePrefix, mac);
+      device_name_, sizeof(device_name_), kConfigDeviceNamePrefix, mac);
 
-  if (!BLEDevice::init(device_name)) {
+  if (!BLEDevice::init(device_name_)) {
     return false;
   }
+#if defined(CONFIG_NIMBLE_ENABLED)
+  // Use a deterministic Random Static Address distinct from the public MAC used
+  // by BLE_HID so Windows does not mix GATT caches or bond state between modes.
+  uint8_t cfg_addr[6] = {
+      static_cast<uint8_t>(mac[5] ^ 0x01U),
+      mac[4],
+      mac[3],
+      mac[2],
+      mac[1],
+      static_cast<uint8_t>((mac[0] ^ 0x02U) | 0xC0U),
+  };
+  BLEDevice::setOwnAddr(cfg_addr);
+  BLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
+#endif
   BLEDevice::setMTU(kBleConfigMtuBytes);
 
   BLEServer* server = BLEDevice::createServer();
@@ -211,6 +224,19 @@ bool BleConfigTransport::init_ble_stack() noexcept {
   advertising->addServiceUUID(tandem::config::kBleConfigServiceUuid);
   advertising->setScanResponse(true);
   advertising->setMinPreferred(0x06);
+#if defined(CONFIG_BLUEDROID_ENABLED)
+  // Use a deterministic Random Static Address distinct from the public MAC used
+  // by BLE_HID so Windows does not mix GATT caches or bond state between modes.
+  esp_bd_addr_t cfg_addr = {
+      static_cast<uint8_t>((mac[0] ^ 0x02U) | 0xC0U),
+      mac[1],
+      mac[2],
+      mac[3],
+      mac[4],
+      static_cast<uint8_t>(mac[5] ^ 0x01U),
+  };
+  advertising->setDeviceAddress(cfg_addr, BLE_ADDR_TYPE_RANDOM);
+#endif
 
   stack_initialized_ = true;
   return true;
