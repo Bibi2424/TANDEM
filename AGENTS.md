@@ -46,11 +46,11 @@
 - **Build tool:** PlatformIO (`pio` via `%USERPROFILE%\.platformio\penv\Scripts`), configured in [platformio.ini](platformio.ini).
 - **Directory layout:**
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
-  - `lib/tandem_hal/` — MCU/board-isolated ADC1 and GPIO input scanner adapter (`espressif32`-scoped) sampling raw axes, debounced buttons, and optional 4-way hat into `tandem::RawStickInput`.
+  - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner and NVS config persistence adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `tools/configurator/` — Static zero-build WebSerial browser configurator (`index.html`, `style.css`, `app.js`) for live stick inspection, calibration, and curve/deadzone tuning.
-  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_config_protocol/`, `test/test_device_name/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
+  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_config_protocol/`, `test/test_config_storage/`, `test/test_device_name/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
   - Unified capability-gated stick firmware (`src/apps/stick/` — USB HID, BLE HID, and ESP-NOW TX with mutually exclusive radio teardown; optional `-DTANDEM_DEFAULT_TRANSPORT_MODE=0|1|2`, `-DTANDEM_STICK_SYNTHETIC_DEFAULT`): `pio run -e esp32_s3_stick`, `pio run -e esp32_wroom_stick` (Left) / `esp32_wroom_stick_right` (Right), `pio run -e esp32_s2_stick`

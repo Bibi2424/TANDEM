@@ -8,6 +8,7 @@
 #include "tandem/input_pipeline.h"
 #include "tandem/synthetic_input.h"
 #include "tandem/types.h"
+#include "tandem_hal/config_nvs.h"
 #include "tandem_hal/input_scanner.h"
 #include "transport_ble_hid.h"
 #include "transport_espnow_tx.h"
@@ -201,11 +202,13 @@ void handle_config_line(const char* line) noexcept {
     g_live_streaming = enabled;
     g_last_live_ms = millis();
   };
+  cbs.on_save = [](void*) -> bool {
+    return tandem::hal::save_stick_config(g_input_config);
+  };
   cbs.on_reset = [](void*) -> bool {
     g_input_config = tandem::hal::make_default_input_config(g_scanner_config);
-    return true;
+    return tandem::hal::reset_stick_config();
   };
-  // Note: `on_save` remains nullptr until #33 wires ESP32 NVS persistence.
 
   char resp[tandem::config::kMaxResponseLength]{};
   const size_t n = tandem::config::process_command(
@@ -330,6 +333,8 @@ void setup() {
   g_scanner_config = tandem::board::make_default_scanner_config();
   g_scanner.init(g_scanner_config);
   g_input_config = tandem::hal::make_default_input_config(g_scanner_config);
+  const tandem::hal::NvsLoadStatus nvs_status =
+      tandem::hal::load_stick_config(g_input_config);
 
 #if TANDEM_CAP_NATIVE_USB
   // Initialize USB composite CDC+HID once at boot so Serial remains available
@@ -373,6 +378,7 @@ void setup() {
   Serial.printf("Stick ID   : %s\n",
                 (g_stick_id == tandem::StickId::Left) ? "LEFT (1)" : "RIGHT (2)");
   Serial.printf("Input      : %s\n", g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
+  Serial.printf("Config NVS : %s\n", tandem::hal::nvs_load_status_name(nvs_status));
   Serial.println("Controls   : 't'/BOOT-short = LIVE<->SYNTH | 'm'/BOOT-long = next mode | '1'/'2'/'3' = USB/BLE/ESP-NOW | 'i' = L<->R");
 
   g_last_tx_us = micros();

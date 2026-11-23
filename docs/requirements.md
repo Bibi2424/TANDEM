@@ -40,7 +40,7 @@ This document outlines the technical baseline requirements for the hardware, fir
 
 # **4\. Configuration, Storage & Tooling**
 
-* **Custom BLE GATT Configuration:** On BLE-capable targets, expose a custom BLE GATT service and characteristics allowing a configuration tool (such as a Web Bluetooth page in Chrome/Edge or a custom app) to read/write calibration, deadzone, and curve parameters.
+* **Transport-Independent Configuration & Capabilities (BLE GATT + USB CDC Serial):** Expose a shared configuration interface and device-capability query (active axes/buttons/hat masks, live raw/shaped inspection, and calibration/deadzone/curve tuning) over **USB CDC Serial (WebSerial)** on all targets (including non-BLE `ESP32-S2`) and **custom BLE GATT** (Web Bluetooth) on BLE-capable targets.
 * **Non-Volatile Persistence:** Save validated settings to non-volatile storage (e.g., ESP32 NVS / Preferences, or equivalent on another MCU) with version/magic/checksum checks and a safe factory-reset fallback on boot.
 * **Stable HID Descriptors:** Keep HID report descriptors consistent when tuning curves/deadzones so existing OS controller bindings aren't broken by routine calibration changes.
 * **Maintainable Build Workflow:** Organize code into modular, MCU-portable C++ components (pure core input/curve math and codecs separated from board/HAL adapters and transport modules: BLE config/NVS, BLE HID, ESP-NOW, USB HID) in PlatformIO (e.g., Arduino framework) with separate build environments/targets per board, experiment, stick, and base station.
