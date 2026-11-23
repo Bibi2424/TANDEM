@@ -21,7 +21,9 @@ A DIY dual-joystick (HOSAS) controller system built around a portable, hardware-
 | **Mode A** | Direct BLE HID gamepad to PC | BLE | `ESP32-WROOM` |
 | **Mode B** | Low-latency ESP-NOW + USB Base Station *(up to 1000 Hz USB HID)* | Wi-Fi / ESP-NOW + Native USB *(base)* | `ESP32-WROOM` → `ESP32-S2` |
 | **Mode C** | Wired USB HID gamepad | Native USB | `ESP32-S2` |
-| **Config** | Custom BLE GATT (Web Bluetooth) + validated NVS persistence | BLE + non-volatile storage | `ESP32-WROOM` |
+| **Config** | USB CDC (WebSerial) & BLE GATT (Web Bluetooth) + validated NVS persistence | USB CDC / BLE + NVS | `ESP32-S2`, `ESP32-WROOM`, `ESP32-S3` |
+
+- **Web Configurator:** Hosted over HTTPS via GitHub Pages at **[https://bibi2424.github.io/TANDEM/](https://bibi2424.github.io/TANDEM/)** (from [`tools/configurator/`](tools/configurator/index.html)) for live stick inspection, axis calibration, deadzones, and response curves in Chrome/Edge.
 
 - **Power-Path Safety:** Target dual-stick hardware pairs native USB with a proper LiPo/Li-ion charging and power-path protection circuit (never wiring battery voltage directly to 5V VBUS).
 
@@ -32,10 +34,12 @@ A DIY dual-joystick (HOSAS) controller system built around a portable, hardware-
 ```text
 TANDEM/
 ├── .github/workflows/ci.yml   # GitHub Actions CI (native tests + firmware builds)
+├── .github/workflows/pages.yml# GitHub Pages deployment for tools/configurator/
 ├── docs/requirements.md       # Baseline hardware, firmware, and verification requirements
 ├── include/boards/            # Per-board capability flags and ADC1/GPIO pinmaps
 ├── lib/tandem_core/           # Pure, dependency-free C++17 core library (host-testable)
 ├── src/apps/                  # Standalone firmware apps selected via build_src_filter
+├── tools/configurator/        # Zero-build WebSerial browser configurator (GitHub Pages)
 ├── test/                      # Native host Unity unit tests (core, axis shaping, input pipeline)
 ├── platformio.ini             # PlatformIO environments (native, ESP32-WROOM, ESP32-S2, ESP32-S3)
 ├── AGENTS.md                  # Repository development & coding conventions

@@ -57,7 +57,7 @@
   - USB Base Station (`ESP32-S2` / `ESP32-S3`, Dual or Combined USB HID + failsafe): `pio run -e esp32_s2_base_station` (Dual) / `esp32_s2_base_station_combined` (Combined), `pio run -e esp32_s3_base_station`
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
-- **CI:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` and `pio run` on pushes to `main` and pull requests.
+- **CI & Pages:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` and `pio run` on pushes to `main` and pull requests; [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
 
 ---
 
