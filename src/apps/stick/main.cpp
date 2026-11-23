@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <cstdint>
+#include <cstdio>
 
 #include "boards/board_config.h"
 #include "stick_mode.h"
@@ -10,6 +11,7 @@
 #include "tandem/types.h"
 #include "tandem_hal/config_nvs.h"
 #include "tandem_hal/input_scanner.h"
+#include "transport_ble_config.h"
 #include "transport_ble_hid.h"
 #include "transport_espnow_tx.h"
 #include "transport_usb_hid.h"
@@ -69,6 +71,7 @@ tandem::stick::UsbHidTransport g_usb_transport;
 #endif
 #if TANDEM_CAP_BLE
 tandem::stick::BleHidTransport g_ble_transport;
+tandem::stick::BleConfigTransport g_ble_config_transport;
 #endif
 #if TANDEM_CAP_ESPNOW
 tandem::stick::EspNowTxTransport g_espnow_transport;
@@ -125,6 +128,12 @@ StickTransport* transport_for_mode(StickTransportMode mode) noexcept {
 #else
       return nullptr;
 #endif
+    case StickTransportMode::BleConfig:
+#if TANDEM_CAP_BLE
+      return &g_ble_config_transport;
+#else
+      return nullptr;
+#endif
   }
   return nullptr;
 }
@@ -148,6 +157,7 @@ void switch_transport_mode(StickTransportMode target) noexcept {
   if (g_transport != nullptr) {
     g_transport->stop();
   }
+  g_live_streaming = false;
   g_mode = target;
   g_transport = transport_for_mode(g_mode);
   const bool ok = (g_transport != nullptr) && g_transport->start();
@@ -196,7 +206,7 @@ tandem::config::DeviceCapabilities build_capabilities() noexcept {
   return caps;
 }
 
-void handle_config_line(const char* line) noexcept {
+void handle_config_line(const char* line, bool via_ble = false) noexcept {
   tandem::config::ConfigCallbacks cbs{};
   cbs.on_live_changed = [](void*, bool enabled) {
     g_live_streaming = enabled;
@@ -214,7 +224,13 @@ void handle_config_line(const char* line) noexcept {
   const size_t n = tandem::config::process_command(
       line, build_capabilities(), g_input_config, cbs, resp, sizeof(resp));
   if (n > 0) {
-    Serial.print(resp);
+    if (via_ble) {
+#if TANDEM_CAP_BLE
+      g_ble_config_transport.send_response(resp, n);
+#endif
+    } else {
+      Serial.print(resp);
+    }
   }
 }
 
@@ -258,6 +274,8 @@ void poll_controls(uint32_t now_ms) noexcept {
       switch_transport_mode(StickTransportMode::BleHid);
     } else if (ch == '3') {
       switch_transport_mode(StickTransportMode::EspNowTx);
+    } else if (ch == '4') {
+      switch_transport_mode(StickTransportMode::BleConfig);
     } else if (ch == 'i' || ch == 'I') {
       g_stick_id = (g_stick_id == tandem::StickId::Left) ? tandem::StickId::Right
                                                           : tandem::StickId::Left;
@@ -267,10 +285,34 @@ void poll_controls(uint32_t now_ms) noexcept {
       Serial.printf("[stick] id -> %s\n",
                     (g_stick_id == tandem::StickId::Left) ? "LEFT" : "RIGHT");
     } else if (ch != '\r' && ch != '\n') {
-      Serial.printf("[stick] ERROR: unknown command '%c' (use t/m/1/2/3/i)\n",
+      Serial.printf("[stick] ERROR: unknown command '%c' (use t/m/1/2/3/4/i)\n",
                     (ch >= 32 && ch < 127) ? static_cast<char>(ch) : '?');
     }
   }
+
+#if TANDEM_CAP_BLE
+  if (g_mode == StickTransportMode::BleConfig) {
+    char ble_cmd[tandem::config::kMaxCommandLength]{};
+    bool overflow = false;
+    while (g_ble_config_transport.pop_command(ble_cmd, sizeof(ble_cmd), overflow)) {
+      if (overflow) {
+        char err_resp[128]{};
+        const int n = std::snprintf(
+            err_resp,
+            sizeof(err_resp),
+            "%s{\"v\":%u,\"cmd\":\"unknown\",\"ok\":false,\"err\":\"line_too_long\"}\n",
+            tandem::config::kResponsePrefix,
+            static_cast<unsigned>(tandem::config::kProtocolVersion));
+        if (n > 0) {
+          g_ble_config_transport.send_response(
+              err_resp, static_cast<size_t>(n));
+        }
+      } else {
+        handle_config_line(ble_cmd, true);
+      }
+    }
+  }
+#endif
 
   const bool raw_pressed = (digitalRead(tandem::board::kPinBootButton) == LOW);
   if (raw_pressed != g_boot_last_raw_pressed) {
@@ -379,7 +421,7 @@ void setup() {
                 (g_stick_id == tandem::StickId::Left) ? "LEFT (1)" : "RIGHT (2)");
   Serial.printf("Input      : %s\n", g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
   Serial.printf("Config NVS : %s\n", tandem::hal::nvs_load_status_name(nvs_status));
-  Serial.println("Controls   : 't'/BOOT-short = LIVE<->SYNTH | 'm'/BOOT-long = next mode | '1'/'2'/'3' = USB/BLE/ESP-NOW | 'i' = L<->R");
+  Serial.println("Controls   : 't'/BOOT-short = LIVE<->SYNTH | 'm'/BOOT-long = next mode | '1'/'2'/'3'/'4' = USB/BLE/ESP-NOW/BLE-CFG | 'i' = L<->R");
 
   g_last_tx_us = micros();
   g_last_status_ms = millis();
@@ -429,7 +471,16 @@ void loop() {
       const size_t n = tandem::config::format_live_response(
           g_last_raw, g_last_state, g_synthetic_enabled, resp, sizeof(resp));
       if (n > 0) {
+#if TANDEM_CAP_BLE
+        if (g_mode == StickTransportMode::BleConfig &&
+            g_ble_config_transport.connected()) {
+          g_ble_config_transport.send_live(resp, n);
+        } else {
+          Serial.print(resp);
+        }
+#else
         Serial.print(resp);
+#endif
       }
     }
   } else if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {

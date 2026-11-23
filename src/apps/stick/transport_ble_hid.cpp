@@ -151,6 +151,13 @@ void BleHidTransport::stop() noexcept {
   if (server != nullptr && ble_connected_.load(std::memory_order_acquire)) {
     server->disconnect(server->getConnId());
   }
+  if (stack_initialized_) {
+    delete g_hid;
+    g_hid = nullptr;
+    g_input_report = nullptr;
+    BLEDevice::deinit(false);
+    stack_initialized_ = false;
+  }
   ble_connected_.store(false, std::memory_order_release);
   ble_restart_adv_.store(false, std::memory_order_release);
   active_ = false;

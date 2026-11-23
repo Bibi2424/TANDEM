@@ -10,6 +10,7 @@ enum class StickTransportMode : uint8_t {
   UsbHid = 0,
   BleHid = 1,
   EspNowTx = 2,
+  BleConfig = 3,
 };
 
 constexpr bool is_mode_supported(StickTransportMode mode) noexcept {
@@ -17,6 +18,7 @@ constexpr bool is_mode_supported(StickTransportMode mode) noexcept {
     case StickTransportMode::UsbHid:
       return tandem::board::kHasNativeUsb;
     case StickTransportMode::BleHid:
+    case StickTransportMode::BleConfig:
       return tandem::board::kHasBle;
     case StickTransportMode::EspNowTx:
       return tandem::board::kHasEspNow;
@@ -32,6 +34,8 @@ constexpr const char* mode_name(StickTransportMode mode) noexcept {
       return "BLE_HID";
     case StickTransportMode::EspNowTx:
       return "ESPNOW_TX";
+    case StickTransportMode::BleConfig:
+      return "BLE_CFG";
   }
   return "UNKNOWN";
 }
@@ -55,14 +59,15 @@ constexpr StickTransportMode default_transport_mode() noexcept {
 }
 
 constexpr StickTransportMode next_supported_mode(StickTransportMode current) noexcept {
-  constexpr StickTransportMode kOrder[3] = {
+  constexpr StickTransportMode kOrder[4] = {
       StickTransportMode::UsbHid,
       StickTransportMode::BleHid,
       StickTransportMode::EspNowTx,
+      StickTransportMode::BleConfig,
   };
   const uint8_t start = static_cast<uint8_t>(current);
-  for (uint8_t offset = 1; offset <= 3; ++offset) {
-    const StickTransportMode candidate = kOrder[(start + offset) % 3];
+  for (uint8_t offset = 1; offset <= 4; ++offset) {
+    const StickTransportMode candidate = kOrder[(start + offset) % 4];
     if (is_mode_supported(candidate)) {
       return candidate;
     }
@@ -82,15 +87,19 @@ static_assert(default_transport_mode() == StickTransportMode::BleHid,
               "WROOM default mode must be BleHid");
 static_assert(next_supported_mode(StickTransportMode::BleHid) == StickTransportMode::EspNowTx,
               "WROOM next mode from BleHid must be EspNowTx");
-static_assert(next_supported_mode(StickTransportMode::EspNowTx) == StickTransportMode::BleHid,
-              "WROOM next mode from EspNowTx must be BleHid");
+static_assert(next_supported_mode(StickTransportMode::EspNowTx) == StickTransportMode::BleConfig,
+              "WROOM next mode from EspNowTx must be BleConfig");
+static_assert(next_supported_mode(StickTransportMode::BleConfig) == StickTransportMode::BleHid,
+              "WROOM next mode from BleConfig must be BleHid");
 #elif TANDEM_CAP_NATIVE_USB && TANDEM_CAP_BLE && TANDEM_CAP_ESPNOW
 static_assert(next_supported_mode(StickTransportMode::UsbHid) == StickTransportMode::BleHid,
               "S3 next mode from UsbHid must be BleHid");
 static_assert(next_supported_mode(StickTransportMode::BleHid) == StickTransportMode::EspNowTx,
               "S3 next mode from BleHid must be EspNowTx");
-static_assert(next_supported_mode(StickTransportMode::EspNowTx) == StickTransportMode::UsbHid,
-              "S3 next mode from EspNowTx must be UsbHid");
+static_assert(next_supported_mode(StickTransportMode::EspNowTx) == StickTransportMode::BleConfig,
+              "S3 next mode from EspNowTx must be BleConfig");
+static_assert(next_supported_mode(StickTransportMode::BleConfig) == StickTransportMode::UsbHid,
+              "S3 next mode from BleConfig must be UsbHid");
 #endif
 
 }  // namespace tandem::stick

@@ -10,10 +10,11 @@
   <header class="topbar">
     <div class="brand">
       <h1>T.A.N.D.E.M. Configurator</h1>
-      <span class="subtitle">WebSerial Calibration &amp; Input Shaping</span>
+      <span class="subtitle">WebSerial &amp; Web Bluetooth Calibration &amp; Input Shaping</span>
     </div>
     <div class="actions">
-      <button id="btn-connect" class="btn btn-primary">Connect Stick (USB)</button>
+      <button id="btn-connect" class="btn btn-primary">Connect USB</button>
+      <button id="btn-connect-ble" class="btn btn-primary">Connect BLE</button>
       <button id="btn-disconnect" class="btn btn-secondary" disabled>Disconnect</button>
       <button id="btn-reset" class="btn btn-secondary" disabled>Reset Defaults</button>
       <button id="btn-save" class="btn btn-accent" disabled>Save to Flash</button>
@@ -22,7 +23,7 @@
 
   <main class="container">
     <div id="banner-unsupported" class="banner banner-warn hidden">
-      WebSerial is not supported in this browser. Open this page in desktop <strong>Chrome</strong> or <strong>Edge</strong>.
+      Neither WebSerial nor Web Bluetooth is supported in this browser. Open this page in desktop <strong>Chrome</strong> or <strong>Edge</strong>.
     </div>
     <div id="status-toast" class="banner hidden"></div>
 
