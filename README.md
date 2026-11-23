@@ -53,6 +53,7 @@ TANDEM/
 
 > [!TIP]
 > **T.A.N.D.E.M. Web Configurator:** **[Open Live Configurator (`bibi2424.github.io/TANDEM`)](https://bibi2424.github.io/TANDEM/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (WebSerial)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
+> For **BLE**, switch the stick to `BLE_CFG` (`'4'` on serial or `BOOT` long-press) and click **Connect BLE** directly in Chrome/Edge — **do not** pair `TANDEM-CFG-...` in Windows Bluetooth Settings.
 > Testing local edits? Run `python tools/configurator/serve.py` and open `http://localhost:8000/`.
 
 ### Prerequisites
