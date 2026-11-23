@@ -1,0 +1,80 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+
+#include "tandem/input_pipeline.h"
+#include "tandem/types.h"
+
+namespace tandem {
+
+// Versioned 204-byte little-endian persisted StickInputConfig contract:
+//   Header (8 bytes):
+//     [0..3]   magic ("TMFC" = 0x54, 0x4D, 0x46, 0x43)
+//     [4..5]   schema_version (uint16_t LE, kConfigStorageVersion = 1)
+//     [6]      axis_count (uint8_t, kMaxAxes = 8)
+//     [7]      reserved (uint8_t, 0)
+//   Axis records (kMaxAxes x 24 bytes = 192 bytes):
+//     [0..3]   min (int32_t LE)
+//     [4..7]   center (int32_t LE)
+//     [8..11]  max (int32_t LE)
+//     [12..15] deadzone (float IEEE-754 LE)
+//     [16]     curve_type (uint8_t: 0 = Linear, 1 = Expo)
+//     [17]     flags (uint8_t: bit0 = enabled, bit1 = invert)
+//     [18..19] reserved (uint16_t LE, 0)
+//     [20..23] curve_param (float IEEE-754 LE)
+//   Trailer (4 bytes):
+//     [200..203] crc32 (uint32_t LE, IEEE 802.3 CRC-32 over bytes [0..199])
+inline constexpr uint8_t kConfigStorageMagic0 = 0x54U;  // 'T'
+inline constexpr uint8_t kConfigStorageMagic1 = 0x4DU;  // 'M'
+inline constexpr uint8_t kConfigStorageMagic2 = 0x46U;  // 'F'
+inline constexpr uint8_t kConfigStorageMagic3 = 0x43U;  // 'C'
+inline constexpr uint16_t kConfigStorageVersion = 1U;
+inline constexpr size_t kConfigHeaderBytes = 8U;
+inline constexpr size_t kConfigAxisRecordBytes = 24U;
+inline constexpr size_t kConfigTrailerBytes = 4U;
+inline constexpr size_t kPersistedConfigBytes =
+    kConfigHeaderBytes + (kMaxAxes * kConfigAxisRecordBytes) + kConfigTrailerBytes;
+
+struct PersistedConfigBlob {
+  uint8_t bytes[kPersistedConfigBytes]{};
+};
+
+static_assert(sizeof(PersistedConfigBlob) == kPersistedConfigBytes,
+              "PersistedConfigBlob must match kPersistedConfigBytes");
+static_assert(kPersistedConfigBytes == 204U,
+              "PersistedConfigBlob v1 layout must be exactly 204 bytes");
+
+enum class ConfigDecodeResult : uint8_t {
+  Ok = 0,
+  InvalidLength = 1,
+  BadMagic = 2,
+  UnsupportedVersion = 3,
+  InvalidAxisCount = 4,
+  BadCrc = 5,
+  InvalidConfig = 6,
+};
+
+/// Computes standard IEEE 802.3 CRC-32 (polynomial 0xEDB88320).
+uint32_t crc32_ieee(const uint8_t* data, size_t len) noexcept;
+
+/// Returns true when a single AxisConfig has valid bounds, deadzone, and curve parameters.
+bool is_valid_axis_config(const AxisConfig& axis) noexcept;
+
+/// Returns true when every axis slot in `cfg` passes `is_valid_axis_config`.
+bool is_valid_stick_config(const StickInputConfig& cfg) noexcept;
+
+/// Serializes and checksums `cfg` into `out`. Returns false if `cfg` fails validation.
+bool encode_stick_config(const StickInputConfig& cfg,
+                         PersistedConfigBlob& out) noexcept;
+
+/// Validates magic, version, axis count, CRC-32, and config bounds before updating `out`.
+/// On any failure, `out` is left unmodified.
+ConfigDecodeResult decode_stick_config(const uint8_t* data,
+                                       size_t len,
+                                       StickInputConfig& out) noexcept;
+
+/// Returns a short human-readable name for `ConfigDecodeResult`.
+const char* config_decode_result_name(ConfigDecodeResult result) noexcept;
+
+}  // namespace tandem
