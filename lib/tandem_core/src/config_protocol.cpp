@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "tandem/core_info.h"
+
 namespace tandem::config {
 
 namespace {
@@ -85,6 +87,93 @@ const char* stick_role_str(StickId id) noexcept {
   }
 }
 
+const char* caps_role_str(const DeviceCapabilities& caps) noexcept {
+  if (caps.is_base_station) {
+    return "BASE";
+  }
+  return stick_role_str(caps.stick_id);
+}
+
+bool append_transports_array(char* out,
+                             size_t out_size,
+                             size_t& pos,
+                             uint8_t mask) noexcept {
+  struct TransportEntry {
+    uint8_t bit;
+    const char* name;
+  };
+  static constexpr TransportEntry kEntries[] = {
+      {kTransportMaskUsbHid, "USB_HID"},
+      {kTransportMaskBleHid, "BLE_HID"},
+      {kTransportMaskEspNowTx, "ESPNOW_TX"},
+      {kTransportMaskBleConfig, "BLE_CFG"},
+      {kTransportMaskEspNowRx, "ESPNOW_RX"},
+      {kTransportMaskUsbSerial, "USB_SERIAL"},
+  };
+  if (!append_fmt(out, out_size, pos, "[")) {
+    return false;
+  }
+  bool first = true;
+  for (const auto& e : kEntries) {
+    if ((mask & e.bit) != 0U) {
+      if (!append_fmt(out, out_size, pos, "%s\"%s\"", first ? "" : ",", e.name)) {
+        return false;
+      }
+      first = false;
+    }
+  }
+  return append_fmt(out, out_size, pos, "]");
+}
+
+bool append_tlm_fields(char* out,
+                       size_t out_size,
+                       size_t& pos,
+                       const TelemetrySnapshot& tlm) noexcept {
+  if (!append_fmt(out, out_size, pos, "{")) {
+    return false;
+  }
+  bool first = true;
+  auto sep = [&first]() -> const char* {
+    const char* s = first ? "" : ",";
+    first = false;
+    return s;
+  };
+
+  if (tlm.has_sample_hz &&
+      !append_fmt(out, out_size, pos, "%s\"hz\":%u", sep(), static_cast<unsigned>(tlm.sample_hz))) {
+    return false;
+  }
+  if (tlm.has_tx_hz &&
+      !append_fmt(out, out_size, pos, "%s\"tx_hz\":%u", sep(), static_cast<unsigned>(tlm.tx_hz))) {
+    return false;
+  }
+  if (tlm.has_rssi &&
+      !append_fmt(out, out_size, pos, "%s\"rssi\":%d", sep(), static_cast<int>(tlm.rssi_dbm))) {
+    return false;
+  }
+  if (tlm.has_dropped &&
+      !append_fmt(out, out_size, pos, "%s\"drop\":%lu", sep(), static_cast<unsigned long>(tlm.dropped_packets))) {
+    return false;
+  }
+  if (tlm.has_failsafe &&
+      !append_fmt(out, out_size, pos, "%s\"fs\":%s", sep(), tlm.failsafe_active ? "true" : "false")) {
+    return false;
+  }
+  if (tlm.has_battery_mv &&
+      !append_fmt(out, out_size, pos, "%s\"bat_mv\":%u", sep(), static_cast<unsigned>(tlm.battery_mv))) {
+    return false;
+  }
+  if (tlm.has_battery_pct &&
+      !append_fmt(out, out_size, pos, "%s\"bat_pct\":%u", sep(), static_cast<unsigned>(tlm.battery_pct))) {
+    return false;
+  }
+  if (tlm.has_peer_status && tlm.peer_status != nullptr && tlm.peer_status[0] != '\0' &&
+      !append_fmt(out, out_size, pos, "%s\"peer\":\"%s\"", sep(), tlm.peer_status)) {
+    return false;
+  }
+  return append_fmt(out, out_size, pos, "}");
+}
+
 size_t format_error(const char* cmd, const char* err, char* out, size_t out_size) noexcept {
   size_t pos = 0;
   if (!append_fmt(out,
@@ -110,24 +199,73 @@ size_t format_caps_response(const DeviceCapabilities& caps,
                             char* out,
                             size_t out_size) noexcept {
   size_t pos = 0;
+  const char* fw = (caps.fw_version != nullptr && caps.fw_version[0] != '\0')
+                       ? caps.fw_version
+                       : core_version();
+  const char* git = (caps.git_commit != nullptr && caps.git_commit[0] != '\0')
+                        ? caps.git_commit
+                        : core_git_commit();
   if (!append_fmt(
           out,
           out_size,
           pos,
           "%s{\"v\":%u,\"cmd\":\"caps\",\"ok\":true,\"board\":\"%s\",\"role\":\"%s\","
           "\"mode\":\"%s\",\"synth\":%s,\"max_axes\":%u,\"axes_mask\":%u,"
-          "\"btns_mask\":%lu,\"hat\":%s,\"adc_max\":%ld}\n",
+          "\"btns_mask\":%lu,\"hat\":%s,\"adc_max\":%ld,\"cfg\":%s,"
+          "\"fw\":\"%s\",\"git\":\"%s\",\"transports\":",
           kResponsePrefix,
           static_cast<unsigned>(kProtocolVersion),
           caps.board != nullptr ? caps.board : "UNKNOWN",
-          stick_role_str(caps.stick_id),
+          caps_role_str(caps),
           caps.transport_mode != nullptr ? caps.transport_mode : "UNKNOWN",
           caps.synthetic ? "true" : "false",
           static_cast<unsigned>(kMaxAxes),
           static_cast<unsigned>(caps.axes_mask),
           static_cast<unsigned long>(caps.buttons_mask),
           caps.has_hat ? "true" : "false",
-          static_cast<long>(caps.adc_max))) {
+          static_cast<long>(caps.adc_max),
+          caps.has_config ? "true" : "false",
+          fw,
+          git)) {
+    return 0;
+  }
+  if (!append_transports_array(out, out_size, pos, caps.transports_mask)) {
+    return 0;
+  }
+  if (caps.peer_status != nullptr && caps.peer_status[0] != '\0') {
+    if (!append_fmt(out, out_size, pos, ",\"peer\":\"%s\"", caps.peer_status)) {
+      return 0;
+    }
+  }
+  if (!append_fmt(out, out_size, pos, "}\n")) {
+    return 0;
+  }
+  return pos;
+}
+
+size_t format_status_response(const DeviceCapabilities& caps,
+                              const TelemetrySnapshot& tlm,
+                              char* out,
+                              size_t out_size) noexcept {
+  size_t pos = 0;
+  if (!append_fmt(
+          out,
+          out_size,
+          pos,
+          "%s{\"v\":%u,\"cmd\":\"status\",\"ok\":true,\"board\":\"%s\",\"role\":\"%s\","
+          "\"mode\":\"%s\",\"synth\":%s,\"tlm\":",
+          kResponsePrefix,
+          static_cast<unsigned>(kProtocolVersion),
+          caps.board != nullptr ? caps.board : "UNKNOWN",
+          caps_role_str(caps),
+          caps.transport_mode != nullptr ? caps.transport_mode : "UNKNOWN",
+          caps.synthetic ? "true" : "false")) {
+    return 0;
+  }
+  if (!append_tlm_fields(out, out_size, pos, tlm)) {
+    return 0;
+  }
+  if (!append_fmt(out, out_size, pos, "}\n")) {
     return 0;
   }
   return pos;
@@ -179,6 +317,15 @@ size_t format_live_response(const RawStickInput& raw,
                             bool synthetic,
                             char* out,
                             size_t out_size) noexcept {
+  return format_live_response(raw, state, synthetic, TelemetrySnapshot{}, out, out_size);
+}
+
+size_t format_live_response(const RawStickInput& raw,
+                            const StickState& state,
+                            bool synthetic,
+                            const TelemetrySnapshot& tlm,
+                            char* out,
+                            size_t out_size) noexcept {
   size_t pos = 0;
   if (!append_fmt(out,
                   out_size,
@@ -211,9 +358,18 @@ size_t format_live_response(const RawStickInput& raw,
   if (!append_fmt(out,
                   out_size,
                   pos,
-                  "],\"btns\":%lu,\"hat\":%u}\n",
+                  "],\"btns\":%lu,\"hat\":%u",
                   static_cast<unsigned long>(state.buttons),
                   static_cast<unsigned>(state.hat))) {
+    return 0;
+  }
+  if (tlm.has_any()) {
+    if (!append_fmt(out, out_size, pos, ",\"tlm\":") ||
+        !append_tlm_fields(out, out_size, pos, tlm)) {
+      return 0;
+    }
+  }
+  if (!append_fmt(out, out_size, pos, "}\n")) {
     return 0;
   }
   return pos;
@@ -255,6 +411,17 @@ size_t process_command(const char* line,
       return format_error("caps", "unexpected_args", out, out_size);
     }
     return format_caps_response(caps, out, out_size);
+  }
+
+  if (token_equals(cmd_start, cmd_len, "status")) {
+    if (!has_no_trailing_tokens(p)) {
+      return format_error("status", "unexpected_args", out, out_size);
+    }
+    TelemetrySnapshot tlm{};
+    if (callbacks.on_get_telemetry != nullptr) {
+      callbacks.on_get_telemetry(callbacks.ctx, tlm);
+    }
+    return format_status_response(caps, tlm, out, out_size);
   }
 
   if (token_equals(cmd_start, cmd_len, "get")) {

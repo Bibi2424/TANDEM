@@ -191,6 +191,11 @@ bool BleHidTransport::send(tandem::StickId,
   return true;
 }
 
+void BleHidTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept {
+  out.has_peer_status = true;
+  out.peer_status = connected() ? "BLE_CONN" : "BLE_ADV";
+}
+
 void BleHidTransport::format_stats(char* out, size_t out_len) const noexcept {
   std::snprintf(out,
                 out_len,

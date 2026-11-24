@@ -19,6 +19,7 @@ class BleConfigTransport final : public StickTransport {
   bool start() noexcept override;
   void stop() noexcept override;
   void poll() noexcept override;
+  void fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept override;
   bool send(tandem::StickId stick_id,
             const tandem::StickState& state) noexcept override;
   void format_stats(char* out, size_t out_len) const noexcept override;

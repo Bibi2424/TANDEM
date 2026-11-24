@@ -100,6 +100,13 @@ bool UsbHidTransport::send(tandem::StickId,
   return false;
 }
 
+void UsbHidTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept {
+  out.has_dropped = true;
+  out.dropped_packets = dropped_;
+  out.has_peer_status = true;
+  out.peer_status = joystick_.ready() ? "USB_READY" : "USB_WAIT";
+}
+
 void UsbHidTransport::format_stats(char* out, size_t out_len) const noexcept {
   std::snprintf(out,
                 out_len,
