@@ -9,6 +9,8 @@
   const BLE_WRITE_CHUNK_BYTES = 20;
   const AXIS_NAMES = ["X", "Y", "Z", "Rx", "Ry", "Rz", "Slider", "Dial"];
   const HAT_LABELS = ["Centered", "N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const NOISE_WINDOW_SIZE = 60;
+  const CIRCULARITY_SECTORS = 36;
 
   const els = {
     unsupported: document.getElementById("banner-unsupported"),
@@ -27,6 +29,27 @@
     valRole: document.getElementById("val-role"),
     valMode: document.getElementById("val-mode"),
     valInput: document.getElementById("val-input"),
+    valFw: document.getElementById("val-fw"),
+    valTransports: document.getElementById("val-transports"),
+    telemetryPanel: document.getElementById("telemetry-panel"),
+    tlmSampleHz: document.getElementById("tlm-sample-hz"),
+    tlmTxHz: document.getElementById("tlm-tx-hz"),
+    tlmPeer: document.getElementById("tlm-peer"),
+    tlmRssi: document.getElementById("tlm-rssi"),
+    tlmDrop: document.getElementById("tlm-drop"),
+    tlmFailsafe: document.getElementById("tlm-failsafe"),
+    tlmBattery: document.getElementById("tlm-battery"),
+    tabBtnLive: document.getElementById("tab-btn-live"),
+    tabBtnCalib: document.getElementById("tab-btn-calib"),
+    panelLive: document.getElementById("panel-live"),
+    panelCalib: document.getElementById("panel-calib"),
+    calibReadonlyBanner: document.getElementById("calib-readonly-banner"),
+    btnSourceGamepad: document.getElementById("btn-source-gamepad"),
+    btnSourceDevice: document.getElementById("btn-source-device"),
+    wrapShowAllBtns: document.getElementById("wrap-show-all-btns"),
+    chkShowAllBtns: document.getElementById("chk-show-all-btns"),
+    btnResetDiag: document.getElementById("btn-reset-diag"),
+    liveCardsContainer: document.getElementById("live-cards-container"),
     axesGrid: document.getElementById("axes-grid"),
     hatBox: document.getElementById("hat-box"),
     valHat: document.getElementById("val-hat"),
@@ -294,12 +317,22 @@
     caps: null,
     axes: [],
     live: { raw: new Array(8).fill(0), out: new Array(8).fill(0), btns: 0, hat: 0, synth: false },
+    tlm: null,
+    streamFrames: 0,
+    streamRateWindowMs: performance.now(),
+    streamHz: 0,
     sweeping: false,
     sweepBounds: [],
+    activeTab: "live",
+    liveSource: "gamepad",
+    diagByCard: new Map(),
+    renderedLiveKey: "",
+    gamepadRafId: null,
   };
 
   const hasSerial = "serial" in navigator;
   const hasBle = "bluetooth" in navigator;
+  const hasGamepadApi = "getGamepads" in navigator;
   const serialTransport = new SerialTransport(handleMessage, handleUnexpectedDisconnect);
   const bleTransport = new BleTransport(handleMessage, handleUnexpectedDisconnect);
   let transport = serialTransport;
@@ -313,23 +346,295 @@
     els.toast.className = "banner hidden";
   }
 
+  function roleDisplay(role) {
+    if (role === "L") return { text: "Left Stick", cls: "role-left" };
+    if (role === "R") return { text: "Right Stick", cls: "role-right" };
+    if (role === "BASE") return { text: "Base Station", cls: "role-base" };
+    return { text: role || "—", cls: "" };
+  }
+
+  function resetDiagnostics(cardKey) {
+    if (cardKey) {
+      state.diagByCard.delete(cardKey);
+    } else {
+      state.diagByCard.clear();
+    }
+  }
+
+  function getCardDiag(cardKey, axisCount) {
+    let diag = state.diagByCard.get(cardKey);
+    if (!diag) {
+      diag = {
+        axes: Array.from({ length: axisCount }, () => []),
+        sectors: new Float64Array(CIRCULARITY_SECTORS),
+      };
+      state.diagByCard.set(cardKey, diag);
+    }
+    while (diag.axes.length < axisCount) {
+      diag.axes.push([]);
+    }
+    return diag;
+  }
+
+  function recordDiagSample(cardKey, norms, rawSamples, sectorsActive) {
+    const diag = getCardDiag(cardKey, Math.max(2, norms.length));
+    for (let i = 0; i < norms.length; i++) {
+      const win = diag.axes[i];
+      win.push({
+        norm: norms[i],
+        raw: rawSamples ? rawSamples[i] : norms[i],
+      });
+      if (win.length > NOISE_WINDOW_SIZE) {
+        win.shift();
+      }
+    }
+    if (sectorsActive && norms.length >= 2) {
+      const x = norms[0];
+      const y = norms[1];
+      const r = Math.hypot(x, y);
+      if (r >= 0.5) {
+        let angle = Math.atan2(y, x);
+        if (angle < 0) angle += Math.PI * 2;
+        const sector = Math.min(
+          CIRCULARITY_SECTORS - 1,
+          Math.floor((angle / (Math.PI * 2)) * CIRCULARITY_SECTORS)
+        );
+        if (r > diag.sectors[sector]) {
+          diag.sectors[sector] = r;
+        }
+      }
+    }
+    return diag;
+  }
+
+  function summarizeAxisWindow(samples) {
+    if (!samples || samples.length === 0) {
+      return { meanRaw: 0, meanNorm: 0, spreadRaw: 0, spreadNorm: 0, stdNorm: 0 };
+    }
+    let minR = samples[0].raw;
+    let maxR = samples[0].raw;
+    let minN = samples[0].norm;
+    let maxN = samples[0].norm;
+    let sumR = 0;
+    let sumN = 0;
+    for (const s of samples) {
+      if (s.raw < minR) minR = s.raw;
+      if (s.raw > maxR) maxR = s.raw;
+      if (s.norm < minN) minN = s.norm;
+      if (s.norm > maxN) maxN = s.norm;
+      sumR += s.raw;
+      sumN += s.norm;
+    }
+    const meanR = sumR / samples.length;
+    const meanN = sumN / samples.length;
+    let sq = 0;
+    for (const s of samples) {
+      const d = s.norm - meanN;
+      sq += d * d;
+    }
+    return {
+      meanRaw: meanR,
+      meanNorm: meanN,
+      spreadRaw: maxR - minR,
+      spreadNorm: maxN - minN,
+      stdNorm: Math.sqrt(sq / samples.length),
+    };
+  }
+
+  function computeCircularityStats(sectors) {
+    let covered = 0;
+    let errSum = 0;
+    let maxErr = 0;
+    for (let s = 0; s < CIRCULARITY_SECTORS; s++) {
+      const r = sectors[s];
+      if (r > 0) {
+        covered++;
+        const e = Math.abs(r - 1.0);
+        errSum += e;
+        if (e > maxErr) maxErr = e;
+      }
+    }
+    return {
+      covered,
+      avgErrPct: covered > 0 ? (errSum / covered) * 100 : null,
+      maxErrPct: covered > 0 ? maxErr * 100 : null,
+    };
+  }
+
+  function switchTab(tab) {
+    state.activeTab = tab;
+    const isLive = tab === "live";
+    els.tabBtnLive.classList.toggle("active", isLive);
+    els.tabBtnLive.setAttribute("aria-selected", String(isLive));
+    els.tabBtnCalib.classList.toggle("active", !isLive);
+    els.tabBtnCalib.setAttribute("aria-selected", String(!isLive));
+    els.panelLive.classList.toggle("hidden", !isLive);
+    els.panelCalib.classList.toggle("hidden", isLive);
+    syncGamepadPolling();
+  }
+
+  function setLiveSource(source) {
+    if (source === "device" && !state.connected) {
+      return;
+    }
+    state.liveSource = source;
+    els.btnSourceGamepad.classList.toggle("active", source === "gamepad");
+    els.btnSourceDevice.classList.toggle("active", source === "device");
+    els.wrapShowAllBtns.classList.toggle("hidden", source !== "device");
+    state.renderedLiveKey = "";
+    renderLiveCards();
+    syncGamepadPolling();
+  }
+
+  function updateIdentityBadges(caps) {
+    if (!caps) {
+      els.valBoard.textContent = "—";
+      els.valRole.textContent = "—";
+      els.valRole.className = "role-badge";
+      els.valMode.textContent = "—";
+      els.valInput.textContent = "—";
+      els.valFw.textContent = "—";
+      els.valTransports.textContent = "—";
+      return;
+    }
+    const r = roleDisplay(caps.role);
+    els.valRole.textContent = r.text;
+    els.valRole.className = `role-badge ${r.cls}`;
+    els.valBoard.textContent = caps.board || "UNKNOWN";
+    els.valMode.textContent = caps.mode || "UNKNOWN";
+    els.valInput.textContent = caps.synth ? "SYNTHETIC" : "LIVE";
+    const fw = caps.fw || "?";
+    const git = caps.git ? ` (${caps.git})` : "";
+    els.valFw.textContent = `${fw}${git}`;
+
+    els.valTransports.innerHTML = "";
+    if (Array.isArray(caps.transports) && caps.transports.length > 0) {
+      for (const tx of caps.transports) {
+        const pill = document.createElement("span");
+        pill.className = `tx-pill${tx === caps.mode ? " active" : ""}`;
+        pill.textContent = tx;
+        els.valTransports.appendChild(pill);
+      }
+    } else {
+      els.valTransports.textContent = caps.mode || "—";
+    }
+  }
+
+  function updateTelemetryDom() {
+    if (!state.connected) {
+      els.telemetryPanel.classList.add("hidden");
+      return;
+    }
+    els.telemetryPanel.classList.remove("hidden");
+    const t = state.tlm || {};
+    els.tlmSampleHz.textContent =
+      typeof t.hz === "number" ? `${t.hz} Hz` : "N/A";
+    const txBase = typeof t.tx_hz === "number" ? `${t.tx_hz} Hz` : "N/A";
+    els.tlmTxHz.textContent =
+      state.streamHz > 0 ? `${txBase} (UI ${state.streamHz} Hz)` : txBase;
+    els.tlmPeer.textContent = t.peer || state.caps?.peer || "N/A";
+    els.tlmRssi.textContent =
+      typeof t.rssi === "number" ? `${t.rssi} dBm` : "N/A";
+    els.tlmDrop.textContent =
+      typeof t.drop === "number" ? String(t.drop) : "N/A";
+
+    if (typeof t.fs === "boolean") {
+      els.tlmFailsafe.textContent = t.fs ? "ACTIVE" : "OK";
+      els.tlmFailsafe.className = `tlm-pill ${t.fs ? "fault" : "ok"}`;
+    } else {
+      els.tlmFailsafe.textContent = "N/A";
+      els.tlmFailsafe.className = "tlm-pill";
+    }
+
+    if (typeof t.bat_mv === "number" && typeof t.bat_pct === "number") {
+      els.tlmBattery.textContent = `${(t.bat_mv / 1000).toFixed(2)} V (${t.bat_pct}%)`;
+    } else if (typeof t.bat_mv === "number") {
+      els.tlmBattery.textContent = `${(t.bat_mv / 1000).toFixed(2)} V`;
+    } else if (typeof t.bat_pct === "number") {
+      els.tlmBattery.textContent = `${t.bat_pct}%`;
+    } else {
+      els.tlmBattery.textContent = "N/A";
+    }
+  }
+
   function setConnectedUi(connected) {
     state.connected = connected;
+    const cfgAllowed = connected && state.caps?.cfg !== false;
     els.btnConnect.disabled = connected || !hasSerial;
     els.btnConnectBle.disabled = connected || !hasBle;
     els.btnDisconnect.disabled = !connected;
-    els.btnReset.disabled = !connected;
-    els.btnSave.disabled = !connected;
-    els.btnCenterAll.disabled = !connected;
-    els.btnSweepAll.disabled = !connected;
-    els.btnApplyAll.disabled = !connected;
+    els.btnReset.disabled = !cfgAllowed;
+    els.btnSave.disabled = !cfgAllowed;
+    els.btnCenterAll.disabled = !cfgAllowed;
+    els.btnSweepAll.disabled = !cfgAllowed;
+    els.btnApplyAll.disabled = !cfgAllowed;
+    els.btnSourceDevice.disabled = !connected;
     els.valStatus.textContent = connected ? "Connected" : "Disconnected";
+
+    if (!connected) {
+      state.caps = null;
+      state.axes = [];
+      state.tlm = null;
+      state.streamHz = 0;
+      updateIdentityBadges(null);
+      updateTelemetryDom();
+      els.calibReadonlyBanner.classList.add("hidden");
+      if (state.liveSource === "device") {
+        setLiveSource("gamepad");
+      }
+      renderAxes();
+      renderDigital();
+    } else {
+      els.calibReadonlyBanner.classList.toggle("hidden", cfgAllowed);
+      updateTelemetryDom();
+    }
   }
 
   function handleMessage(msg) {
+    if (msg.cmd === "caps" && msg.ok && state.connected) {
+      const prevMode = state.caps?.mode;
+      const prevRole = state.caps?.role;
+      state.caps = msg;
+      updateIdentityBadges(msg);
+      if (prevMode !== msg.mode || prevRole !== msg.role) {
+        state.renderedLiveKey = "";
+        if (state.liveSource === "device" && state.activeTab === "live") {
+          renderLiveCards();
+        }
+        if (prevMode && prevMode !== msg.mode) {
+          showToast(`Device mode changed to ${msg.mode}.`, "ok");
+        } else if (prevRole && prevRole !== msg.role) {
+          showToast(`Device role changed to ${roleDisplay(msg.role).text}.`, "ok");
+        }
+      }
+      return;
+    }
+
+    if (msg.cmd === "status") {
+      if (msg.tlm) {
+        state.tlm = msg.tlm;
+        updateTelemetryDom();
+      }
+      return;
+    }
+
     if (msg.cmd === "live" && Array.isArray(msg.raw) && Array.isArray(msg.out)) {
       state.live = msg;
+      if (msg.tlm) {
+        state.tlm = msg.tlm;
+      }
+      const now = performance.now();
+      state.streamFrames++;
+      if (now - state.streamRateWindowMs >= 1000) {
+        state.streamHz = Math.round(
+          (state.streamFrames * 1000) / (now - state.streamRateWindowMs)
+        );
+        state.streamFrames = 0;
+        state.streamRateWindowMs = now;
+      }
       els.valInput.textContent = msg.synth ? "SYNTHETIC" : "LIVE";
+      updateTelemetryDom();
+
       if (state.sweeping) {
         for (let i = 0; i < 8; i++) {
           const r = msg.raw[i];
@@ -338,7 +643,10 @@
           if (r > b.max) b.max = r;
         }
       }
-      updateLiveDom();
+      updateCalibrationLiveDom();
+      if (state.liveSource === "device" && state.activeTab === "live") {
+        updateDeviceLiveCard();
+      }
     }
   }
 
@@ -347,7 +655,447 @@
     state.sweeping = false;
     els.btnSweepAll.textContent = "Start Min/Max Sweep";
     els.btnSweepAll.className = "btn btn-secondary";
-    showToast("Serial connection closed.", "warn");
+    showToast("Device connection closed.", "warn");
+  }
+
+  function buildHatSvg(cardKey) {
+    const coords = [
+      [46, 46], // 0 Centered
+      [46, 12], // 1 N
+      [70, 22], // 2 NE
+      [80, 46], // 3 E
+      [70, 70], // 4 SE
+      [46, 80], // 5 S
+      [22, 70], // 6 SW
+      [12, 46], // 7 W
+      [22, 22], // 8 NW
+    ];
+    const dots = coords
+      .map(
+        ([cx, cy], idx) =>
+          `<circle id="hat-dot-${cardKey}-${idx}" cx="${cx}" cy="${cy}" r="${idx === 0 ? 5 : 4}" fill="${idx === 0 ? "#10b981" : "#2c3547"}" />`
+      )
+      .join("");
+    return `
+      <svg width="92" height="92" viewBox="0 0 92 92">
+        <circle cx="46" cy="46" r="38" fill="none" stroke="#2c3547" stroke-width="1.5" />
+        <line x1="46" y1="8" x2="46" y2="84" stroke="#1f2634" stroke-width="1" />
+        <line x1="8" y1="46" x2="84" y2="46" stroke="#1f2634" stroke-width="1" />
+        ${dots}
+      </svg>
+    `;
+  }
+
+  function createLiveCardElement({ cardKey, title, badgeText, axisIndices, buttonCount, hasHat }) {
+    const card = document.createElement("div");
+    card.className = "live-card";
+    card.dataset.cardKey = cardKey;
+
+    const axisRowsHtml = axisIndices
+      .map(
+        (idx) => `
+      <div class="live-axis-row">
+        <span>${AXIS_NAMES[idx] ?? `A${idx}`}</span>
+        <div class="bar-track"><div class="bar-fill shaped" id="live-bar-${cardKey}-${idx}"></div></div>
+        <span class="live-axis-num" id="live-num-${cardKey}-${idx}">0</span>
+      </div>`
+      )
+      .join("");
+
+    const btnPillsHtml = Array.from({ length: buttonCount }, (_, idx) => {
+      return `<div class="btn-pill" id="live-btn-${cardKey}-${idx}">B${idx + 1}</div>`;
+    }).join("");
+
+    const hatHtml = hasHat
+      ? `
+      <div class="hat-compass">
+        ${buildHatSvg(cardKey)}
+        <strong id="live-hat-label-${cardKey}" class="hat-compass-label">Centered (0)</strong>
+      </div>`
+      : "";
+
+    card.innerHTML = `
+      <div class="live-card-head">
+        <span class="live-card-title">${title}</span>
+        <span class="badge">${badgeText}</span>
+      </div>
+      <div class="live-top-row">
+        <div class="xy-box">
+          <canvas class="xy-canvas" id="xy-canvas-${cardKey}" width="220" height="220"></canvas>
+          <div class="xy-readout" id="xy-readout-${cardKey}">X: +0.000  Y: +0.000</div>
+        </div>
+        <div class="live-axes-list">${axisRowsHtml}</div>
+      </div>
+      <div class="live-digital-row">
+        ${hatHtml}
+        <div class="live-buttons-wrap">${btnPillsHtml}</div>
+      </div>
+      <div class="diag-panel">
+        <div class="diag-metric">
+          <span class="diag-label">X Rest-Offset &amp; Jitter</span>
+          <strong id="diag-x-${cardKey}">—</strong>
+        </div>
+        <div class="diag-metric">
+          <span class="diag-label">Y Rest-Offset &amp; Jitter</span>
+          <strong id="diag-y-${cardKey}">—</strong>
+        </div>
+        <div class="diag-metric">
+          <span class="diag-label">X/Y Circularity Error</span>
+          <strong id="diag-circ-${cardKey}">Move full rim (0/36)</strong>
+        </div>
+      </div>
+    `;
+    return card;
+  }
+
+  function drawXyCanvas(cardKey, xNorm, yNorm, sectors) {
+    const canvas = document.getElementById(`xy-canvas-${cardKey}`);
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = 88;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#0f1218";
+    ctx.fillRect(0, 0, w, h);
+
+    // Square limit box (-1..+1)
+    ctx.strokeStyle = "#1f2634";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - radius, cy - radius, radius * 2, radius * 2);
+
+    // Crosshairs
+    ctx.strokeStyle = "#2c3547";
+    ctx.beginPath();
+    ctx.moveTo(cx - radius - 8, cy);
+    ctx.lineTo(cx + radius + 8, cy);
+    ctx.moveTo(cx, cy - radius - 8);
+    ctx.lineTo(cx, cy + radius + 8);
+    ctx.stroke();
+
+    // Reference circles (50% and 100%)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.5, 0, Math.PI * 2);
+    ctx.strokeStyle = "#1f2634";
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = "#334155";
+    ctx.stroke();
+
+    // Circularity outer rim trace
+    const pts = [];
+    for (let s = 0; s < CIRCULARITY_SECTORS; s++) {
+      if (sectors[s] > 0) {
+        const ang = ((s + 0.5) / CIRCULARITY_SECTORS) * Math.PI * 2;
+        const rPx = Math.min(1.18, sectors[s]) * radius;
+        pts.push([cx + Math.cos(ang) * rPx, cy + Math.sin(ang) * rPx]);
+      }
+    }
+    if (pts.length >= 3) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i][0], pts[i][1]);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "rgba(59, 130, 246, 0.18)";
+      ctx.fill();
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Current stick vector + point
+    const px = cx + Math.max(-1.15, Math.min(1.15, xNorm)) * radius;
+    const py = cy + Math.max(-1.15, Math.min(1.15, yNorm)) * radius;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(px, py);
+    ctx.strokeStyle = "rgba(16, 185, 129, 0.55)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(px, py, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#10b981";
+    ctx.fill();
+  }
+
+  function updateHatCompass(cardKey, hatVal) {
+    const clamped = hatVal >= 0 && hatVal <= 8 ? hatVal : 0;
+    for (let idx = 0; idx <= 8; idx++) {
+      const dot = document.getElementById(`hat-dot-${cardKey}-${idx}`);
+      if (dot) {
+        dot.setAttribute("fill", idx === clamped ? "#10b981" : "#2c3547");
+      }
+    }
+    const label = document.getElementById(`live-hat-label-${cardKey}`);
+    if (label) {
+      label.textContent = `${HAT_LABELS[clamped] ?? "?"} (${clamped})`;
+    }
+  }
+
+  function updateCardDiagnosticsDom(cardKey, diag, rawCfgAxes) {
+    const circ = computeCircularityStats(diag.sectors);
+    const circEl = document.getElementById(`diag-circ-${cardKey}`);
+    if (circEl) {
+      if (circ.covered === 0) {
+        circEl.textContent = "Move full rim (0/36)";
+      } else {
+        circEl.textContent = `avg ${circ.avgErrPct.toFixed(1)}% | max ${circ.maxErrPct.toFixed(1)}% (${circ.covered}/36)`;
+      }
+    }
+
+    for (const [axisIdx, elId] of [
+      [0, `diag-x-${cardKey}`],
+      [1, `diag-y-${cardKey}`],
+    ]) {
+      const el = document.getElementById(elId);
+      if (!el) continue;
+      const stats = summarizeAxisWindow(diag.axes[axisIdx]);
+      if (rawCfgAxes && rawCfgAxes[axisIdx]) {
+        const ax = rawCfgAxes[axisIdx];
+        const offsetCnt = stats.meanRaw - ax.ctr;
+        const halfSpan = Math.max(1, (ax.max - ax.min) / 2);
+        const offsetPct = (offsetCnt / halfSpan) * 100;
+        el.textContent = `${offsetCnt >= 0 ? "+" : ""}${offsetCnt.toFixed(1)} cnt (${offsetPct >= 0 ? "+" : ""}${offsetPct.toFixed(1)}%) | span ${stats.spreadRaw.toFixed(0)} cnt`;
+      } else {
+        el.textContent = `off ${stats.meanNorm >= 0 ? "+" : ""}${(stats.meanNorm * 100).toFixed(2)}% | jit ${(stats.spreadNorm * 100).toFixed(2)}% (σ ${(stats.stdNorm * 100).toFixed(2)}%)`;
+      }
+    }
+  }
+
+  function getDeviceButtonIndices() {
+    if (!state.caps || els.chkShowAllBtns.checked) {
+      return Array.from({ length: 32 }, (_, i) => i);
+    }
+    const mask = state.caps.btns_mask >>> 0;
+    const list = [];
+    for (let b = 0; b < 32; b++) {
+      if (((mask >>> b) & 1) === 1) {
+        list.push(b);
+      }
+    }
+    return list.length > 0 ? list : Array.from({ length: 16 }, (_, i) => i);
+  }
+
+  function getDeviceAxisIndices() {
+    if (!state.caps) {
+      return [0, 1, 2, 3];
+    }
+    const mask = state.caps.axes_mask || 0;
+    const list = [];
+    for (let i = 0; i < 8; i++) {
+      if ((mask & (1 << i)) !== 0) {
+        list.push(i);
+      }
+    }
+    if (!list.includes(0)) list.unshift(0);
+    if (!list.includes(1)) list.splice(1, 0, 1);
+    return list;
+  }
+
+  function renderLiveCards() {
+    if (state.liveSource === "device") {
+      if (!state.connected || !state.caps) {
+        els.liveCardsContainer.innerHTML = `<p class="muted">Connect a T.A.N.D.E.M. device to view its live stream.</p>`;
+        state.renderedLiveKey = "device-empty";
+        return;
+      }
+      const axes = getDeviceAxisIndices();
+      const btns = getDeviceButtonIndices();
+      const key = `device-${axes.join(",")}-${btns.length}-${state.caps.hat ? 1 : 0}`;
+      if (state.renderedLiveKey === key) return;
+      state.renderedLiveKey = key;
+
+      const r = roleDisplay(state.caps.role);
+      const card = createLiveCardElement({
+        cardKey: "device",
+        title: `${r.text} — ${state.caps.board || "T.A.N.D.E.M."}`,
+        badgeText: state.caps.mode || "LIVE",
+        axisIndices: axes,
+        buttonCount: btns.length,
+        hasHat: Boolean(state.caps.hat),
+      });
+      // Remap button pill IDs to actual hardware button indices when filtered
+      const pills = card.querySelectorAll(".live-buttons-wrap .btn-pill");
+      pills.forEach((pill, pos) => {
+        const hwBit = btns[pos];
+        pill.id = `live-btn-device-${hwBit}`;
+        pill.textContent = `B${hwBit + 1}`;
+      });
+
+      els.liveCardsContainer.innerHTML = "";
+      els.liveCardsContainer.appendChild(card);
+      updateDeviceLiveCard();
+      return;
+    }
+
+    // Browser Gamepad API mode
+    if (!hasGamepadApi) {
+      els.liveCardsContainer.innerHTML = `<p class="muted">Gamepad API is not available in this browser.</p>`;
+      state.renderedLiveKey = "gp-unsupported";
+      return;
+    }
+
+    const pads = Array.from(navigator.getGamepads()).filter(Boolean);
+    if (pads.length === 0) {
+      if (state.renderedLiveKey !== "gp-empty") {
+        state.renderedLiveKey = "gp-empty";
+        els.liveCardsContainer.innerHTML = `<p class="muted">No active browser Gamepad detected yet. Plug in or pair a USB/BLE controller and press any button or move a stick to wake Chrome/Edge's Gamepad API, or connect above via <strong>Connect USB</strong> / <strong>Connect BLE</strong>.</p>`;
+      }
+      return;
+    }
+
+    const key = `gp-${pads.map((p) => `${p.index}:${p.axes.length}:${p.buttons.length}`).join("|")}`;
+    if (state.renderedLiveKey !== key) {
+      state.renderedLiveKey = key;
+      const frag = document.createDocumentFragment();
+      for (const gp of pads) {
+        const cardKey = `gp-${gp.index}`;
+        const axisIndices = Array.from({ length: Math.min(8, gp.axes.length) }, (_, i) => i);
+        const card = createLiveCardElement({
+          cardKey,
+          title: gp.id,
+          badgeText: `Gamepad #${gp.index} (${gp.mapping || "raw"})`,
+          axisIndices,
+          buttonCount: Math.min(32, gp.buttons.length),
+          hasHat: gp.axes.length >= 10 || gp.buttons.length >= 16,
+        });
+        frag.appendChild(card);
+      }
+      els.liveCardsContainer.innerHTML = "";
+      els.liveCardsContainer.appendChild(frag);
+    }
+  }
+
+  function updateDeviceLiveCard() {
+    const out = state.live.out || [];
+    const raw = state.live.raw || [];
+    const xNorm = (out[0] ?? 0) / 32767;
+    const yNorm = (out[1] ?? 0) / 32767;
+    const norms = out.map((v) => (v ?? 0) / 32767);
+    const diag = recordDiagSample("device", norms, raw, true);
+
+    drawXyCanvas("device", xNorm, yNorm, diag.sectors);
+    const xyEl = document.getElementById("xy-readout-device");
+    if (xyEl) {
+      xyEl.textContent = `X: ${out[0] ?? 0}  Y: ${out[1] ?? 0}`;
+    }
+
+    for (let i = 0; i < 8; i++) {
+      const bar = document.getElementById(`live-bar-device-${i}`);
+      const num = document.getElementById(`live-num-device-${i}`);
+      if (!bar || !num) continue;
+      const val = out[i] ?? 0;
+      const pct = Math.min(50, (Math.abs(val) / 32767) * 50);
+      bar.style.width = `${pct}%`;
+      bar.style.left = val >= 0 ? "50%" : `${50 - pct}%`;
+      num.textContent = `${val} (${raw[i] ?? 0})`;
+    }
+
+    if (state.caps?.hat) {
+      updateHatCompass("device", state.live.hat ?? 0);
+    }
+
+    const maskBtns = state.live.btns >>> 0;
+    for (let b = 0; b < 32; b++) {
+      const pill = document.getElementById(`live-btn-device-${b}`);
+      if (pill) {
+        pill.classList.toggle("pressed", ((maskBtns >>> b) & 1) === 1);
+      }
+    }
+
+    const cfgAxes = state.caps?.cfg !== false && state.axes.length === 8 ? state.axes : null;
+    updateCardDiagnosticsDom("device", diag, cfgAxes);
+  }
+
+  function decodeGamepadHat(gp) {
+    // Check standard HID hat axis mapped by Chromium on axis 9 (values ~ -1.0 .. +1.0 for 1..8, >1.1 centered)
+    if (gp.axes.length >= 10) {
+      const h = gp.axes[9];
+      if (typeof h === "number" && h >= -1.05 && h <= 1.05) {
+        const idx = Math.round(((h + 1.0) / 2.0) * 7.0) + 1;
+        if (idx >= 1 && idx <= 8) return idx;
+      }
+    }
+    // Fallback to W3C standard mapping D-pad buttons 12..15 (Up, Down, Left, Right)
+    if (gp.mapping === "standard" && gp.buttons.length >= 16) {
+      const n = gp.buttons[12]?.pressed;
+      const s = gp.buttons[13]?.pressed;
+      const w = gp.buttons[14]?.pressed;
+      const e = gp.buttons[15]?.pressed;
+      if (n && e) return 2;
+      if (s && e) return 4;
+      if (s && w) return 6;
+      if (n && w) return 8;
+      if (n) return 1;
+      if (e) return 3;
+      if (s) return 5;
+      if (w) return 7;
+    }
+    return 0;
+  }
+
+  function pollGamepadsFrame() {
+    if (state.activeTab !== "live" || state.liveSource !== "gamepad" || !hasGamepadApi) {
+      state.gamepadRafId = null;
+      return;
+    }
+    renderLiveCards();
+    const pads = Array.from(navigator.getGamepads()).filter(Boolean);
+    for (const gp of pads) {
+      const cardKey = `gp-${gp.index}`;
+      const norms = gp.axes.slice(0, 8).map((v) => (Number.isFinite(v) ? v : 0));
+      const diag = recordDiagSample(cardKey, norms, null, true);
+      const xNorm = norms[0] ?? 0;
+      const yNorm = norms[1] ?? 0;
+
+      drawXyCanvas(cardKey, xNorm, yNorm, diag.sectors);
+      const xyEl = document.getElementById(`xy-readout-${cardKey}`);
+      if (xyEl) {
+        xyEl.textContent = `X: ${xNorm >= 0 ? "+" : ""}${xNorm.toFixed(3)}  Y: ${yNorm >= 0 ? "+" : ""}${yNorm.toFixed(3)}`;
+      }
+
+      for (let i = 0; i < norms.length; i++) {
+        const bar = document.getElementById(`live-bar-${cardKey}-${i}`);
+        const num = document.getElementById(`live-num-${cardKey}-${i}`);
+        if (!bar || !num) continue;
+        const val = norms[i];
+        const pct = Math.min(50, Math.abs(val) * 50);
+        bar.style.width = `${pct}%`;
+        bar.style.left = val >= 0 ? "50%" : `${50 - pct}%`;
+        num.textContent = `${val >= 0 ? "+" : ""}${val.toFixed(3)}`;
+      }
+
+      updateHatCompass(cardKey, decodeGamepadHat(gp));
+
+      const btnCount = Math.min(32, gp.buttons.length);
+      for (let b = 0; b < btnCount; b++) {
+        const pill = document.getElementById(`live-btn-${cardKey}-${b}`);
+        if (pill) {
+          pill.classList.toggle("pressed", Boolean(gp.buttons[b]?.pressed));
+        }
+      }
+      updateCardDiagnosticsDom(cardKey, diag, null);
+    }
+    state.gamepadRafId = requestAnimationFrame(pollGamepadsFrame);
+  }
+
+  function syncGamepadPolling() {
+    const shouldPoll =
+      state.activeTab === "live" && state.liveSource === "gamepad" && hasGamepadApi;
+    if (shouldPoll && state.gamepadRafId === null) {
+      state.gamepadRafId = requestAnimationFrame(pollGamepadsFrame);
+    } else if (!shouldPoll && state.gamepadRafId !== null) {
+      cancelAnimationFrame(state.gamepadRafId);
+      state.gamepadRafId = null;
+    }
   }
 
   function computeCurvePoints(deadzone, curveType, expoParam) {
@@ -366,7 +1114,11 @@
 
   function renderAxes() {
     if (!state.caps || state.axes.length === 0) {
-      els.axesGrid.innerHTML = `<p class="muted">Connect a T.A.N.D.E.M. stick over USB to inspect and calibrate axes.</p>`;
+      els.axesGrid.innerHTML = `<p class="muted">Connect a T.A.N.D.E.M. stick over USB (WebSerial) or BLE (<code>BLE_CFG</code> mode — no OS Bluetooth pairing needed).</p>`;
+      return;
+    }
+    if (state.caps.cfg === false) {
+      els.axesGrid.innerHTML = `<p class="muted">Calibration controls are disabled for Base Station connections. Use the Live Tester tab to inspect incoming dual-stick telemetry.</p>`;
       return;
     }
 
@@ -447,7 +1199,7 @@
 
     els.axesGrid.innerHTML = "";
     els.axesGrid.appendChild(frag);
-    updateLiveDom();
+    updateCalibrationLiveDom();
   }
 
   function renderDigital() {
@@ -472,7 +1224,7 @@
     els.buttonsGrid.appendChild(frag);
   }
 
-  function updateLiveDom() {
+  function updateCalibrationLiveDom() {
     const adcMax = state.caps ? Math.max(1, state.caps.adc_max) : 4095;
     for (let i = 0; i < 8; i++) {
       const rawEl = document.getElementById(`raw-val-${i}`);
@@ -532,13 +1284,24 @@
 
   async function refreshConfig() {
     const caps = await transport.sendCommand("caps", "caps");
-    const cfg = await transport.sendCommand("get", "get");
     state.caps = caps;
-    state.axes = cfg.axes;
-    els.valBoard.textContent = caps.board;
-    els.valRole.textContent = caps.role === "L" ? "Left" : caps.role === "R" ? "Right" : caps.role;
-    els.valMode.textContent = caps.mode;
-    els.valInput.textContent = caps.synth ? "SYNTHETIC" : "LIVE";
+    updateIdentityBadges(caps);
+
+    if (caps.cfg !== false) {
+      const cfg = await transport.sendCommand("get", "get");
+      state.axes = cfg.axes || [];
+    } else {
+      state.axes = [];
+    }
+
+    try {
+      const st = await transport.sendCommand("status", "status");
+      if (st?.tlm) {
+        state.tlm = st.tlm;
+      }
+    } catch (_) {}
+
+    setConnectedUi(true);
     renderAxes();
     renderDigital();
   }
@@ -548,10 +1311,14 @@
     transport = selectedTransport;
     try {
       await transport.connect();
-      setConnectedUi(true);
       await refreshConfig();
+      resetDiagnostics("device");
+      setLiveSource("device");
+      if (state.caps?.cfg === false) {
+        switchTab("live");
+      }
       await transport.sendCommand("live 1", "live");
-      showToast("Connected to T.A.N.D.E.M. stick.", "ok");
+      showToast("Connected to T.A.N.D.E.M. device.", "ok");
     } catch (err) {
       await transport.disconnect();
       setConnectedUi(false);
@@ -628,17 +1395,40 @@
     if (res.ok) {
       showToast("Saved configuration to flash.", "ok");
     } else if (res.err === "nvs_not_implemented") {
-      showToast("Save to flash pending #33 (NVS persistence); changes are active in RAM.", "warn");
+      showToast("Save to flash unavailable on this target; changes are active in RAM.", "warn");
     } else {
       showToast(`Save failed: ${res.err}`, "err");
     }
   });
 
   els.chkShowAllAxes.addEventListener("change", renderAxes);
+  els.chkShowAllBtns.addEventListener("change", () => {
+    state.renderedLiveKey = "";
+    renderLiveCards();
+  });
+  els.tabBtnLive.addEventListener("click", () => switchTab("live"));
+  els.tabBtnCalib.addEventListener("click", () => switchTab("calib"));
+  els.btnSourceGamepad.addEventListener("click", () => setLiveSource("gamepad"));
+  els.btnSourceDevice.addEventListener("click", () => setLiveSource("device"));
+  els.btnResetDiag.addEventListener("click", () => {
+    resetDiagnostics();
+    showToast("Reset live diagnostics (noise window & circularity trace).", "ok");
+  });
+
+  window.addEventListener("gamepadconnected", () => {
+    state.renderedLiveKey = "";
+    renderLiveCards();
+  });
+  window.addEventListener("gamepaddisconnected", () => {
+    state.renderedLiveKey = "";
+    renderLiveCards();
+  });
 
   if (!hasSerial && !hasBle) {
     els.unsupported.classList.remove("hidden");
   }
   els.btnConnect.disabled = !hasSerial;
   els.btnConnectBle.disabled = !hasBle;
+  switchTab("live");
+  renderLiveCards();
 })();

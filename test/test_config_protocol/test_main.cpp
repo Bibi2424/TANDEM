@@ -166,9 +166,100 @@ void test_live_sample_and_buffer_overflow_guard() {
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"raw\":[1000,3000,"));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"out\":[-16384,16384,"));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"btns\":5,\"hat\":3"));
+  TEST_ASSERT_NULL(std::strstr(out, "\"tlm\":"));
 
   char tiny[16]{};
   TEST_ASSERT_EQUAL_UINT32(0, format_live_response(raw, state, false, tiny, sizeof(tiny)));
+}
+
+void test_caps_extended_metadata_and_base_station_role() {
+  DeviceCapabilities caps{};
+  caps.board = "ESP32-S2";
+  caps.is_base_station = true;
+  caps.has_config = false;
+  caps.transport_mode = "ESPNOW_RX_DUAL";
+  caps.transports_mask = kTransportMaskEspNowRx | kTransportMaskUsbHid | kTransportMaskUsbSerial;
+  caps.fw_version = "0.1.0";
+  caps.git_commit = "abc1234";
+  caps.peer_status = "L:CONN R:DISC";
+
+  StickInputConfig cfg{};
+  ConfigCallbacks cbs{};
+  char out[kMaxResponseLength]{};
+
+  const size_t n = process_command("$TANDEM caps", caps, cfg, cbs, out, sizeof(out));
+  TEST_ASSERT_GREATER_THAN(0, n);
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"role\":\"BASE\""));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cfg\":false"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"fw\":\"0.1.0\""));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"git\":\"abc1234\""));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"transports\":[\"USB_HID\",\"ESPNOW_RX\",\"USB_SERIAL\"]"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"peer\":\"L:CONN R:DISC\""));
+}
+
+void test_status_command_formats_telemetry_and_rejects_args() {
+  DeviceCapabilities caps{};
+  caps.board = "ESP32-S3";
+  caps.stick_id = StickId::Left;
+  caps.transport_mode = "ESPNOW_TX";
+
+  StickInputConfig cfg{};
+  ConfigCallbacks cbs{};
+  cbs.on_get_telemetry = [](void*, TelemetrySnapshot& tlm) -> bool {
+    tlm.has_sample_hz = true;
+    tlm.sample_hz = 1000;
+    tlm.has_tx_hz = true;
+    tlm.tx_hz = 250;
+    tlm.has_rssi = true;
+    tlm.rssi_dbm = -58;
+    tlm.has_dropped = true;
+    tlm.dropped_packets = 3;
+    tlm.has_failsafe = true;
+    tlm.failsafe_active = false;
+    tlm.has_battery_mv = true;
+    tlm.battery_mv = 4120;
+    tlm.has_battery_pct = true;
+    tlm.battery_pct = 92;
+    tlm.has_peer_status = true;
+    tlm.peer_status = "BROADCAST";
+    return true;
+  };
+
+  char out[kMaxResponseLength]{};
+  const size_t n = process_command("$TANDEM status", caps, cfg, cbs, out, sizeof(out));
+  TEST_ASSERT_GREATER_THAN(0, n);
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"status\",\"ok\":true"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"hz\":1000"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"tx_hz\":250"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"rssi\":-58"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"drop\":3"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"fs\":false"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"bat_mv\":4120"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"bat_pct\":92"));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"peer\":\"BROADCAST\""));
+
+  const size_t err_n = process_command("$TANDEM status extra", caps, cfg, cbs, out, sizeof(out));
+  TEST_ASSERT_GREATER_THAN(0, err_n);
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"unexpected_args\""));
+}
+
+void test_live_response_with_partial_telemetry() {
+  RawStickInput raw{};
+  StickState state = make_centered_state();
+  TelemetrySnapshot tlm{};
+  tlm.has_tx_hz = true;
+  tlm.tx_hz = 100;
+  tlm.has_failsafe = true;
+  tlm.failsafe_active = true;
+  tlm.has_peer_status = true;
+  tlm.peer_status = "BLE_CONN";
+
+  char out[kMaxResponseLength]{};
+  const size_t n = format_live_response(raw, state, true, tlm, out, sizeof(out));
+  TEST_ASSERT_GREATER_THAN(0, n);
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"tlm\":{\"tx_hz\":100,\"fs\":true,\"peer\":\"BLE_CONN\"}"));
+  TEST_ASSERT_NULL(std::strstr(out, "\"rssi\""));
+  TEST_ASSERT_NULL(std::strstr(out, "\"bat_mv\""));
 }
 
 int main() {
@@ -178,5 +269,8 @@ int main() {
   RUN_TEST(test_set_updates_axis_and_rejects_invalid_inputs);
   RUN_TEST(test_live_save_and_reset_callbacks);
   RUN_TEST(test_live_sample_and_buffer_overflow_guard);
+  RUN_TEST(test_caps_extended_metadata_and_base_station_role);
+  RUN_TEST(test_status_command_formats_telemetry_and_rejects_args);
+  RUN_TEST(test_live_response_with_partial_telemetry);
   return UNITY_END();
 }

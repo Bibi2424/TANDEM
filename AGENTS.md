@@ -49,7 +49,8 @@
   - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner and NVS config persistence adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
-  - `tools/configurator/` — Static zero-build WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for live stick inspection, calibration, and curve/deadzone tuning.
+  - `tools/configurator/` — Static zero-build WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
+  - `tools/git_version.py` — PlatformIO `pre:` script injecting `TANDEM_GIT_COMMIT` for firmware identity reporting.
   - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_ble_config_gatt/`, `test/test_config_protocol/`, `test/test_config_storage/`, `test/test_device_name/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`

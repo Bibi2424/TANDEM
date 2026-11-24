@@ -103,6 +103,21 @@ bool EspNowTxTransport::send(tandem::StickId stick_id,
   return false;
 }
 
+void EspNowTxTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept {
+  out.has_dropped = true;
+  out.dropped_packets =
+      tx_errors_ + g_ack_fail.load(std::memory_order_relaxed);
+  out.has_peer_status = true;
+  bool is_broadcast = true;
+  for (uint8_t b : peer_mac_) {
+    if (b != 0xFFU) {
+      is_broadcast = false;
+      break;
+    }
+  }
+  out.peer_status = is_broadcast ? "BROADCAST" : "UNICAST";
+}
+
 void EspNowTxTransport::format_stats(char* out, size_t out_len) const noexcept {
   std::snprintf(out,
                 out_len,

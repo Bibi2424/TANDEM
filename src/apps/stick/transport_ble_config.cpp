@@ -357,6 +357,11 @@ bool BleConfigTransport::send_live(const char* data, size_t len) noexcept {
   return false;
 }
 
+void BleConfigTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept {
+  out.has_peer_status = true;
+  out.peer_status = connected() ? "BLE_CFG_CONN" : "BLE_CFG_ADV";
+}
+
 void BleConfigTransport::format_stats(char* out, size_t out_len) const noexcept {
   std::snprintf(out,
                 out_len,

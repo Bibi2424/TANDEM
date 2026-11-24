@@ -6,6 +6,7 @@
 #include "stick_mode.h"
 #include "stick_transport.h"
 #include "tandem/config_protocol.h"
+#include "tandem/core_info.h"
 #include "tandem/input_pipeline.h"
 #include "tandem/synthetic_input.h"
 #include "tandem/types.h"
@@ -91,8 +92,14 @@ uint32_t g_last_tx_us = 0;
 uint32_t g_last_status_ms = 0;
 uint32_t g_last_live_ms = 0;
 uint32_t g_last_led_ms = 0;
+uint32_t g_rate_window_ms = 0;
+uint32_t g_sample_count = 0;
+uint32_t g_tx_count = 0;
+uint16_t g_measured_sample_hz = 0;
+uint16_t g_measured_tx_hz = 0;
 bool g_led_state = false;
-bool g_live_streaming = false;
+bool g_live_serial = false;
+bool g_live_ble = false;
 
 char g_cmd_buf[tandem::config::kMaxCommandLength]{};
 size_t g_cmd_len = 0;
@@ -138,6 +145,20 @@ StickTransport* transport_for_mode(StickTransportMode mode) noexcept {
   return nullptr;
 }
 
+tandem::config::DeviceCapabilities build_capabilities() noexcept;
+
+void emit_serial_caps_if_streaming() noexcept {
+  if (!g_live_serial) {
+    return;
+  }
+  char resp[tandem::config::kMaxResponseLength]{};
+  const size_t n = tandem::config::format_caps_response(
+      build_capabilities(), resp, sizeof(resp));
+  if (n > 0) {
+    Serial.print(resp);
+  }
+}
+
 void switch_transport_mode(StickTransportMode target) noexcept {
   if (!tandem::stick::is_mode_supported(target)) {
     Serial.printf("[stick] ERROR: mode %s is not supported on %s\n",
@@ -157,11 +178,17 @@ void switch_transport_mode(StickTransportMode target) noexcept {
   if (g_transport != nullptr) {
     g_transport->stop();
   }
-  g_live_streaming = false;
+  // BLE live streaming stops across radio teardown, while USB Serial stays connected.
+  g_live_ble = false;
   g_mode = target;
   g_transport = transport_for_mode(g_mode);
   const bool ok = (g_transport != nullptr) && g_transport->start();
   g_last_tx_us = micros();
+  g_rate_window_ms = millis();
+  g_sample_count = 0;
+  g_tx_count = 0;
+  g_measured_sample_hz = 0;
+  g_measured_tx_hz = 0;
   if (ok) {
     if (g_transport->device_name() != nullptr) {
       Serial.printf("[stick] mode -> %s (%s, ok)\n",
@@ -171,10 +198,25 @@ void switch_transport_mode(StickTransportMode target) noexcept {
       Serial.printf("[stick] mode -> %s (ok)\n",
                     tandem::stick::mode_name(g_mode));
     }
+    emit_serial_caps_if_streaming();
   } else {
     Serial.printf("[stick] ERROR: failed to start mode %s\n",
                   tandem::stick::mode_name(g_mode));
   }
+}
+
+tandem::config::TelemetrySnapshot build_telemetry() noexcept {
+  tandem::config::TelemetrySnapshot tlm{};
+  tlm.has_sample_hz = true;
+  tlm.sample_hz = g_measured_sample_hz;
+  tlm.has_tx_hz = true;
+  tlm.tx_hz = g_measured_tx_hz;
+  tlm.has_failsafe = true;
+  tlm.failsafe_active = false;
+  if (g_transport != nullptr) {
+    g_transport->fill_telemetry(tlm);
+  }
+  return tlm;
 }
 
 tandem::config::DeviceCapabilities build_capabilities() noexcept {
@@ -184,6 +226,26 @@ tandem::config::DeviceCapabilities build_capabilities() noexcept {
   caps.transport_mode = tandem::stick::mode_name(g_mode);
   caps.synthetic = g_synthetic_enabled;
   caps.adc_max = (1L << g_scanner_config.adc_bits) - 1L;
+  caps.is_base_station = false;
+  caps.has_config = true;
+  caps.fw_version = tandem::core_version();
+  caps.git_commit = tandem::core_git_commit();
+
+  uint8_t transports_mask = tandem::config::kTransportMaskUsbSerial;
+  if constexpr (tandem::board::kHasNativeUsb) {
+    transports_mask |= tandem::config::kTransportMaskUsbHid;
+  }
+  if constexpr (tandem::board::kHasBle) {
+    transports_mask |= tandem::config::kTransportMaskBleHid |
+                       tandem::config::kTransportMaskBleConfig;
+  }
+  if constexpr (tandem::board::kHasEspNow) {
+    transports_mask |= tandem::config::kTransportMaskEspNowTx;
+  }
+  caps.transports_mask = transports_mask;
+
+  const tandem::config::TelemetrySnapshot tlm = build_telemetry();
+  caps.peer_status = tlm.has_peer_status ? tlm.peer_status : nullptr;
 
   uint8_t axes_mask = 0;
   for (uint8_t i = 0; i < tandem::kMaxAxes; ++i) {
@@ -214,8 +276,14 @@ tandem::config::DeviceCapabilities build_capabilities() noexcept {
 
 void handle_config_line(const char* line, bool via_ble = false) noexcept {
   tandem::config::ConfigCallbacks cbs{};
-  cbs.on_live_changed = [](void*, bool enabled) {
-    g_live_streaming = enabled;
+  cbs.ctx = &via_ble;
+  cbs.on_live_changed = [](void* ctx, bool enabled) {
+    const bool from_ble = (ctx != nullptr) && *static_cast<const bool*>(ctx);
+    if (from_ble) {
+      g_live_ble = enabled;
+    } else {
+      g_live_serial = enabled;
+    }
     g_last_live_ms = millis();
   };
   cbs.on_save = [](void*) -> bool {
@@ -224,6 +292,10 @@ void handle_config_line(const char* line, bool via_ble = false) noexcept {
   cbs.on_reset = [](void*) -> bool {
     g_input_config = tandem::hal::make_default_input_config(g_scanner_config);
     return tandem::hal::reset_stick_config();
+  };
+  cbs.on_get_telemetry = [](void*, tandem::config::TelemetrySnapshot& out) -> bool {
+    out = build_telemetry();
+    return true;
   };
 
   char resp[tandem::config::kMaxResponseLength]{};
@@ -290,6 +362,7 @@ void poll_controls(uint32_t now_ms) noexcept {
       }
       Serial.printf("[stick] id -> %s\n",
                     (g_stick_id == tandem::StickId::Left) ? "LEFT" : "RIGHT");
+      emit_serial_caps_if_streaming();
     } else if (ch != '\r' && ch != '\n') {
       Serial.printf("[stick] ERROR: unknown command '%c' (use t/m/1/2/3/4/i)\n",
                     (ch >= 32 && ch < 127) ? static_cast<char>(ch) : '?');
@@ -435,6 +508,7 @@ void setup() {
   g_last_tx_us = micros();
   g_last_status_ms = millis();
   g_last_led_ms = g_last_status_ms;
+  g_rate_window_ms = g_last_status_ms;
 }
 
 void loop() {
@@ -458,9 +532,23 @@ void loop() {
         g_last_state = tandem::process_stick_input(
             g_last_raw, g_input_config, tandem::kStateFlagConnected);
       }
+      ++g_sample_count;
 
-      g_transport->send(g_stick_id, g_last_state);
+      if (g_transport->send(g_stick_id, g_last_state)) {
+        ++g_tx_count;
+      }
     }
+  }
+
+  const uint32_t rate_elapsed_ms = static_cast<uint32_t>(now_ms - g_rate_window_ms);
+  if (rate_elapsed_ms >= 1000U) {
+    g_measured_sample_hz = static_cast<uint16_t>(
+        (g_sample_count * 1000UL) / rate_elapsed_ms);
+    g_measured_tx_hz = static_cast<uint16_t>(
+        (g_tx_count * 1000UL) / rate_elapsed_ms);
+    g_sample_count = 0;
+    g_tx_count = 0;
+    g_rate_window_ms = now_ms;
   }
 
   const uint32_t led_interval =
@@ -473,22 +561,30 @@ void loop() {
     }
   }
 
-  if (g_live_streaming) {
+  bool ble_live_active = false;
+#if TANDEM_CAP_BLE
+  if (g_mode != StickTransportMode::BleConfig ||
+      !g_ble_config_transport.connected()) {
+    g_live_ble = false;
+  }
+  ble_live_active = g_live_ble;
+#endif
+
+  if (g_live_serial || ble_live_active) {
     if (static_cast<uint32_t>(now_ms - g_last_live_ms) >= kLiveStreamIntervalMs) {
       g_last_live_ms = now_ms;
       char resp[tandem::config::kMaxResponseLength]{};
       const size_t n = tandem::config::format_live_response(
-          g_last_raw, g_last_state, g_synthetic_enabled, resp, sizeof(resp));
+          g_last_raw, g_last_state, g_synthetic_enabled, build_telemetry(),
+          resp, sizeof(resp));
       if (n > 0) {
-#if TANDEM_CAP_BLE
-        if (g_mode == StickTransportMode::BleConfig &&
-            g_ble_config_transport.connected()) {
-          g_ble_config_transport.send_live(resp, n);
-        } else {
+        if (g_live_serial) {
           Serial.print(resp);
         }
-#else
-        Serial.print(resp);
+#if TANDEM_CAP_BLE
+        if (ble_live_active) {
+          g_ble_config_transport.send_live(resp, n);
+        }
 #endif
       }
     }

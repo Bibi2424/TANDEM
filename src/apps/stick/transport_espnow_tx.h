@@ -28,6 +28,7 @@ class EspNowTxTransport final : public StickTransport {
   bool start() noexcept override;
   void stop() noexcept override;
   void on_stick_id_changed() noexcept override { seq_ = 0; }
+  void fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept override;
   bool send(tandem::StickId stick_id,
             const tandem::StickState& state) noexcept override;
   void format_stats(char* out, size_t out_len) const noexcept override;

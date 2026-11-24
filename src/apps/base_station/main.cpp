@@ -18,10 +18,13 @@ USBCDC g_usb_serial;
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "boards/board_config.h"
 #include "esp32-hal-tinyusb.h"
+#include "tandem/config_protocol.h"
+#include "tandem/core_info.h"
 #include "tandem/device_name.h"
 #include "tandem/espnow_packet.h"
 #include "tandem/failsafe.h"
@@ -56,6 +59,7 @@ constexpr uint32_t kFailsafeTimeoutMs =
     static_cast<uint32_t>(TANDEM_FAILSAFE_TIMEOUT_MS);
 constexpr uint32_t kUsbPollIntervalUs = 1000;  // 1000 Hz USB HID target
 constexpr uint32_t kStatusIntervalMs = 2000;
+constexpr uint32_t kLiveStreamIntervalMs = 33;
 constexpr uint32_t kLedConnectedIntervalMs = 250;
 constexpr uint32_t kLedIdleIntervalMs = 1000;
 constexpr uint32_t kUsbSerialWaitMs = 1500;
@@ -142,11 +146,23 @@ tandem::StickCombineConfig g_combine_config = tandem::make_default_combine_confi
 
 uint32_t g_last_usb_us = 0;
 uint32_t g_last_status_ms = 0;
+uint32_t g_last_live_ms = 0;
 uint32_t g_last_led_ms = 0;
+uint32_t g_rate_window_ms = 0;
+uint32_t g_rx_pkt_count = 0;
+uint32_t g_tx_report_count = 0;
+uint16_t g_measured_rx_hz = 0;
+uint16_t g_measured_tx_hz = 0;
 bool g_led_state = false;
+bool g_live_streaming = false;
 uint32_t g_usb_sent = 0;
 uint32_t g_usb_dropped = 0;
+[[maybe_unused]] size_t g_next_dual_idx = 0;
 int8_t g_last_rssi[2]{0, 0};
+char g_peer_status_buf[32]{"L:DISC R:DISC"};
+char g_cmd_buf[tandem::config::kMaxCommandLength]{};
+size_t g_cmd_len = 0;
+bool g_cmd_reading_line = false;
 
 const char* link_status_str(tandem::LinkStatus status) noexcept {
   switch (status) {
@@ -157,6 +173,87 @@ const char* link_status_str(tandem::LinkStatus status) noexcept {
     case tandem::LinkStatus::Disconnected:
     default:
       return "DISC";
+  }
+}
+
+tandem::config::TelemetrySnapshot build_base_telemetry() noexcept {
+  std::snprintf(g_peer_status_buf,
+                sizeof(g_peer_status_buf),
+                "L:%s R:%s",
+                link_status_str(g_monitors[0].status()),
+                link_status_str(g_monitors[1].status()));
+
+  tandem::EspNowLinkStats stats_copy[2]{};
+  portENTER_CRITICAL(&g_rx_mux);
+  stats_copy[0] = g_link_stats[0];
+  stats_copy[1] = g_link_stats[1];
+  portEXIT_CRITICAL(&g_rx_mux);
+
+  tandem::config::TelemetrySnapshot tlm{};
+  tlm.has_sample_hz = true;
+  tlm.sample_hz = g_measured_rx_hz;
+  tlm.has_tx_hz = true;
+  tlm.tx_hz = g_measured_tx_hz;
+  tlm.has_dropped = true;
+  tlm.dropped_packets = stats_copy[0].dropped_packets +
+                        stats_copy[1].dropped_packets +
+                        g_decode_errors.load(std::memory_order_relaxed);
+
+  const bool left_conn = g_monitors[0].is_connected();
+  const bool right_conn = g_monitors[1].is_connected();
+  tlm.has_failsafe = true;
+  tlm.failsafe_active =
+      (!left_conn && !right_conn) ||
+      (g_monitors[0].status() == tandem::LinkStatus::TimedOut) ||
+      (g_monitors[1].status() == tandem::LinkStatus::TimedOut);
+
+  if (left_conn || right_conn) {
+    tlm.has_rssi = true;
+    tlm.rssi_dbm = left_conn ? g_last_rssi[0] : g_last_rssi[1];
+  }
+  tlm.has_peer_status = true;
+  tlm.peer_status = g_peer_status_buf;
+  return tlm;
+}
+
+tandem::config::DeviceCapabilities build_base_capabilities() noexcept {
+  const tandem::config::TelemetrySnapshot tlm = build_base_telemetry();
+  tandem::config::DeviceCapabilities caps{};
+  caps.board = tandem::board::kBoardName;
+  caps.stick_id = tandem::StickId::Unknown;
+  caps.is_base_station = true;
+  caps.has_config = false;
+  caps.transport_mode = kCombinedMode ? "ESPNOW_RX_COMBINED" : "ESPNOW_RX_DUAL";
+  caps.synthetic = false;
+  caps.axes_mask = 0xFFU;
+  caps.buttons_mask = 0xFFFFFFFFUL;
+  caps.has_hat = true;
+  caps.adc_max = tandem::kDefaultAxisMax;
+  caps.transports_mask = tandem::config::kTransportMaskEspNowRx |
+                         tandem::config::kTransportMaskUsbHid |
+                         tandem::config::kTransportMaskUsbSerial;
+  caps.fw_version = tandem::core_version();
+  caps.git_commit = tandem::core_git_commit();
+  caps.peer_status = tlm.peer_status;
+  return caps;
+}
+
+void handle_serial_config_line(const char* line) noexcept {
+  tandem::config::ConfigCallbacks cbs{};
+  cbs.on_live_changed = [](void*, bool enabled) {
+    g_live_streaming = enabled;
+    g_last_live_ms = millis();
+  };
+  cbs.on_get_telemetry = [](void*, tandem::config::TelemetrySnapshot& out) -> bool {
+    out = build_base_telemetry();
+    return true;
+  };
+  char resp[tandem::config::kMaxResponseLength]{};
+  tandem::StickInputConfig unused_cfg{};
+  const size_t n = tandem::config::process_command(
+      line, build_base_capabilities(), unused_cfg, cbs, resp, sizeof(resp));
+  if (n > 0) {
+    Serial.print(resp);
   }
 }
 
@@ -293,11 +390,42 @@ void setup() {
   g_last_usb_us = micros();
   g_last_status_ms = now_ms;
   g_last_led_ms = now_ms;
+  g_rate_window_ms = now_ms;
+}
+
+void poll_serial_config() noexcept {
+  while (Serial.available() > 0) {
+    const int ch = Serial.read();
+    if (g_cmd_reading_line) {
+      if (ch == '\r' || ch == '\n') {
+        g_cmd_buf[g_cmd_len] = '\0';
+        g_cmd_reading_line = false;
+        g_cmd_len = 0;
+        handle_serial_config_line(g_cmd_buf);
+      } else if (g_cmd_len + 1 < sizeof(g_cmd_buf)) {
+        g_cmd_buf[g_cmd_len++] = static_cast<char>(ch);
+      } else {
+        g_cmd_reading_line = false;
+        g_cmd_len = 0;
+        Serial.printf("%s{\"v\":%u,\"cmd\":\"unknown\",\"ok\":false,\"err\":\"line_too_long\"}\n",
+                      tandem::config::kResponsePrefix,
+                      static_cast<unsigned>(tandem::config::kProtocolVersion));
+      }
+      continue;
+    }
+
+    if (ch == '$') {
+      g_cmd_reading_line = true;
+      g_cmd_buf[0] = '$';
+      g_cmd_len = 1;
+    }
+  }
 }
 
 void loop() {
-  const uint32_t now_us = micros();
   const uint32_t now_ms = millis();
+  poll_serial_config();
+  const uint32_t now_us = micros();
 
   if (static_cast<uint32_t>(now_us - g_last_usb_us) >= kUsbPollIntervalUs) {
     g_last_usb_us = now_us;
@@ -317,6 +445,7 @@ void loop() {
         const bool was_connected = g_monitors[i].is_connected();
         g_monitors[i].on_packet(local_snap[i].state, now_ms);
         g_last_rssi[i] = local_snap[i].rssi;
+        ++g_rx_pkt_count;
         if (!was_connected && g_monitors[i].is_connected()) {
           portENTER_CRITICAL(&g_rx_mux);
           g_link_stats[i].reset();
@@ -332,19 +461,32 @@ void loop() {
           g_monitors[0].state(), g_monitors[1].state(), g_combine_config);
       if (send_hid_report(kReportIdLeft, combined)) {
         ++g_usb_sent;
+        ++g_tx_report_count;
       } else {
         ++g_usb_dropped;
       }
     } else {
       const uint8_t report_ids[2] = {kReportIdLeft, kReportIdRight};
-      for (size_t i = 0; i < 2U; ++i) {
-        if (send_hid_report(report_ids[i], g_monitors[i].state())) {
-          ++g_usb_sent;
-        } else {
-          ++g_usb_dropped;
-        }
+      if (send_hid_report(report_ids[g_next_dual_idx],
+                          g_monitors[g_next_dual_idx].state())) {
+        ++g_usb_sent;
+        ++g_tx_report_count;
+        g_next_dual_idx ^= 1U;
+      } else {
+        ++g_usb_dropped;
       }
     }
+  }
+
+  const uint32_t rate_elapsed_ms = static_cast<uint32_t>(now_ms - g_rate_window_ms);
+  if (rate_elapsed_ms >= 1000U) {
+    g_measured_rx_hz = static_cast<uint16_t>(
+        (g_rx_pkt_count * 1000UL) / rate_elapsed_ms);
+    g_measured_tx_hz = static_cast<uint16_t>(
+        (g_tx_report_count * 1000UL) / rate_elapsed_ms);
+    g_rx_pkt_count = 0;
+    g_tx_report_count = 0;
+    g_rate_window_ms = now_ms;
   }
 
   const bool any_connected =
@@ -359,7 +501,25 @@ void loop() {
     }
   }
 
-  if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {
+  if (g_live_streaming) {
+    if (static_cast<uint32_t>(now_ms - g_last_live_ms) >= kLiveStreamIntervalMs) {
+      g_last_live_ms = now_ms;
+      const tandem::RawStickInput raw_zero{};
+      const tandem::StickState active_state =
+          kCombinedMode
+              ? tandem::combine_sticks(
+                    g_monitors[0].state(), g_monitors[1].state(), g_combine_config)
+              : ((g_monitors[0].is_connected() || !g_monitors[1].is_connected())
+                     ? g_monitors[0].state()
+                     : g_monitors[1].state());
+      char resp[tandem::config::kMaxResponseLength]{};
+      const size_t n = tandem::config::format_live_response(
+          raw_zero, active_state, false, build_base_telemetry(), resp, sizeof(resp));
+      if (n > 0) {
+        Serial.print(resp);
+      }
+    }
+  } else if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {
     g_last_status_ms = now_ms;
 
     tandem::EspNowLinkStats stats_copy[2]{};
