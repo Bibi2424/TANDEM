@@ -1,0 +1,135 @@
+name: Shared Checks
+
+on:
+  workflow_call:
+    inputs:
+      fw-version:
+        description: Optional TANDEM_FW_VERSION override for native tests.
+        required: false
+        type: string
+        default: ""
+      run-coverage:
+        description: Run native coverage tests and publish coverage summary/PR comment/artifact.
+        required: false
+        type: boolean
+        default: false
+      publish-test-report:
+        description: Publish native JUnit XML test results via dorny/test-reporter.
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  format-check:
+    name: C++ Format Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned clang-format
+        run: |
+          CF_VERSION=$(python tools/check_format.py --print-version)
+          python -m pip install --upgrade pip "clang-format==${CF_VERSION}"
+
+      - name: Check C++ formatting
+        run: python tools/check_format.py --strict-version
+
+  native-tests:
+    name: Native Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up PlatformIO
+        uses: ./.github/actions/setup-platformio
+        with:
+          cache-key: ${{ runner.os }}-pio-native-${{ hashFiles('platformio.ini', 'lib/**/library.json') }}
+          cache-restore-keys: ${{ runner.os }}-pio-native-
+          extra-packages: ${{ inputs.run-coverage && 'gcovr' || '' }}
+
+      - name: Run native unit tests
+        env:
+          TANDEM_FW_VERSION: ${{ inputs.fw-version }}
+        run: |
+          mkdir -p test-results
+          pio test -e native -v --junit-output-path test-results/junit.xml
+
+      - name: Publish unit test results
+        uses: dorny/test-reporter@v1
+        if: (success() || failure()) && inputs.publish-test-report
+        with:
+          name: Native Unit Test Results
+          path: "test-results/**/*.xml"
+          reporter: java-junit
+          list-tests: all
+          fail-on-error: "false"
+
+      - name: Run native coverage tests
+        if: inputs.run-coverage
+        run: |
+          rm -rf .pio/build/native_cov
+          pio test -e native_cov
+
+      - name: Generate tandem_core coverage report
+        if: inputs.run-coverage
+        run: |
+          mkdir -p coverage
+          gcovr --root . --filter lib/tandem_core/ \
+            --exclude-unreachable-branches --exclude-throw-branches \
+            --txt \
+            --json coverage/coverage.json \
+            --html-details coverage/index.html
+
+      - name: Build CI summary report
+        if: (success() || failure()) && inputs.run-coverage
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          ARGS=(--run-url "$RUN_URL" --marker "<!-- tandem-ci-report -->" --output test-results/ci-report.md)
+          if [ -f test-results/junit.xml ]; then
+            ARGS+=(--junit-xml test-results/junit.xml)
+          fi
+          if [ -f coverage/coverage.json ]; then
+            ARGS+=(--coverage-json coverage/coverage.json)
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$BASE_SHA" ]; then
+            ARGS+=(--base-ref "$BASE_SHA")
+          fi
+          python tools/format_coverage_summary.py "${ARGS[@]}"
+          cat test-results/ci-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post or update sticky PR comment
+        if: (success() || failure()) && inputs.run-coverage && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          COMMENT_ID=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" \
+            --jq '.[] | select(.body | contains("<!-- tandem-ci-report -->")) | .id' | head -n 1)
+          if [ -n "$COMMENT_ID" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${COMMENT_ID}" -F body=@test-results/ci-report.md >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -F body=@test-results/ci-report.md >/dev/null
+          fi
+
+      - name: Upload HTML coverage report
+        if: inputs.run-coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: tandem-core-coverage-html
+          path: coverage/
+          retention-days: 14

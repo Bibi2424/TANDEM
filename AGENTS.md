@@ -52,7 +52,8 @@
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `tools/configurator/` — Static zero-build WebHID, WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
   - `tools/check_format.py` — Runs `clang-format --dry-run --Werror` (or `--fix`) over C/C++ files in `include/`, `lib/`, `src/`, `test/` using the CI-pinned `clang-format` version.
-  - `tools/git_version.py` — PlatformIO `pre:` script injecting `TANDEM_GIT_COMMIT` for firmware identity reporting.
+  - `tools/git_version.py` — PlatformIO `pre:` script (and CLI with `--print-version` / `--print-commit`) injecting `TANDEM_FW_VERSION` (exact Git tag SemVer or `<base>-dev+<sha>` fallback, with optional `TANDEM_FW_VERSION` env override) and `TANDEM_GIT_COMMIT` scoped solely to `lib/tandem_core/src/core_info.cpp` to preserve build caches.
+  - `tools/merge_bin.py` — PlatformIO `post:` script on `[esp32_base]` registering `-t mergebin` to merge bootloader, partition table, `boot_app0`, and `firmware.bin` into a `0x0`-flashable `firmware-merged.bin` via `esptool merge-bin`.
   - `tools/format_coverage_summary.py` — Renders JUnit XML, `gcovr --json`, and PR diff coverage into a Markdown report for GitHub Actions step summaries and sticky PR comments.
   - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_ble_config_gatt/`, `test/test_config_protocol/`, `test/test_config_storage/`, `test/test_device_name/`, `test/test_hid_config_transport/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
 - **Defined environments & commands:**
@@ -61,9 +62,13 @@
   - Native unit tests with coverage: `pio test -e native_cov`
   - Unified capability-gated stick firmware (`src/apps/stick/` — USB HID, BLE HID, ESP-NOW TX, and BLE GATT Config with mutually exclusive radio teardown; optional `-DTANDEM_DEFAULT_TRANSPORT_MODE=0|1|2|3`, `-DTANDEM_STICK_SYNTHETIC_DEFAULT`): `pio run -e esp32_s3_stick`, `pio run -e esp32_wroom_stick` (Left) / `esp32_wroom_stick_right` (Right), `pio run -e esp32_s2_stick`
   - USB Base Station (`ESP32-S2` / `ESP32-S3`, Dual or Combined USB HID + failsafe): `pio run -e esp32_s2_base_station` (Dual) / `esp32_s2_base_station_combined` (Combined), `pio run -e esp32_s3_base_station`
+  - Merged flashable binary (`0x0`): `pio run -e <env> -t mergebin`
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
-- **CI & Pages:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `C++ Format Check` (`python tools/check_format.py --strict-version`), `pio test -e native -v` (publishing JUnit XML results via `dorny/test-reporter`), `pio test -e native_cov` (publishing `lib/tandem_core/` `gcovr` + PR diff coverage to the step summary, a sticky same-repo PR comment, and an HTML report artifact), and `pio run` on pushes to `main` and pull requests; [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
+- **CI, Releases & Pages:** GitHub Actions uses shared reusable workflow [.github/workflows/_checks.yml](.github/workflows/_checks.yml) and composite action [.github/actions/setup-platformio/action.yml](.github/actions/setup-platformio/action.yml):
+  - [.github/workflows/ci.yml](.github/workflows/ci.yml) runs `_checks.yml` (`C++ Format Check` via `python tools/check_format.py --strict-version`, `pio test -e native -v` publishing JUnit XML results via `dorny/test-reporter`, and `pio test -e native_cov` publishing `lib/tandem_core/` `gcovr` + PR diff coverage to the step summary, sticky same-repo PR comment, and HTML artifact) alongside cached `pio run` firmware builds on pushes to `main` and pull requests.
+  - [.github/workflows/release.yml](.github/workflows/release.yml) triggers on `v*` SemVer tags and `workflow_dispatch`, runs `_checks.yml` (without coverage), compiles and merges all 7 firmware targets cleanly from source (no compiled build-object cache) + `SHA256SUMS.txt`, uploads workflow artifacts, and publishes GitHub Releases on `v*` tags (automatically marking `-alpha`/`-beta`/`-rc` tags as prereleases).
+  - [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
 
 ---
 
