@@ -354,6 +354,11 @@ body {
   color: #a7f3d0;
 }
 
+.tx-pill.active-link {
+  border-color: var(--primary);
+  color: #93c5fd;
+}
+
 .telemetry-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
