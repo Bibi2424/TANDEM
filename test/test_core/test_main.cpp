@@ -9,12 +9,79 @@
 
 static_assert(__cplusplus >= 201703L, "Native tests expect C++17 or newer");
 
+namespace {
+
+bool is_semver_ident_char(unsigned char ch) noexcept {
+  return std::isalnum(ch) != 0 || ch == '-';
+}
+
+bool parse_ident_list(const char*& p) noexcept {
+  while (true) {
+    if (!is_semver_ident_char(static_cast<unsigned char>(*p))) {
+      return false;
+    }
+    while (is_semver_ident_char(static_cast<unsigned char>(*p))) {
+      ++p;
+    }
+    if (*p != '.') {
+      return true;
+    }
+    ++p;
+  }
+}
+
+bool is_valid_semver(const char* s) noexcept {
+  if (s == nullptr || s[0] == '\0') {
+    return false;
+  }
+  const char* p = s;
+  for (int comp = 0; comp < 3; ++comp) {
+    if (std::isdigit(static_cast<unsigned char>(*p)) == 0) {
+      return false;
+    }
+    if (*p == '0') {
+      ++p;
+      if (std::isdigit(static_cast<unsigned char>(*p)) != 0) {
+        return false;
+      }
+    } else {
+      while (std::isdigit(static_cast<unsigned char>(*p)) != 0) {
+        ++p;
+      }
+    }
+    if (comp < 2) {
+      if (*p != '.') {
+        return false;
+      }
+      ++p;
+    }
+  }
+  if (*p == '-') {
+    ++p;
+    if (!parse_ident_list(p)) {
+      return false;
+    }
+  }
+  if (*p == '+') {
+    ++p;
+    if (!parse_ident_list(p)) {
+      return false;
+    }
+  }
+  return *p == '\0';
+}
+
+}  // namespace
+
 void setUp() {}
 void tearDown() {}
 
 void test_core_version_is_defined() {
-  TEST_ASSERT_NOT_NULL(tandem::core_version());
-  TEST_ASSERT_EQUAL_STRING("0.1.0", tandem::core_version());
+  const char* version = tandem::core_version();
+  TEST_ASSERT_NOT_NULL(version);
+  TEST_ASSERT_TRUE(std::strcmp(version, "0.0.0-unknown") != 0);
+  TEST_ASSERT_TRUE(std::strcmp(version, "unknown") != 0);
+  TEST_ASSERT_TRUE_MESSAGE(is_valid_semver(version), version);
 }
 
 void test_core_git_commit_is_defined() {

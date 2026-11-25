@@ -1,0 +1,210 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional SemVer override for dry-run artifacts (e.g. 0.1.0-alpha). Leave blank to resolve from Git."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Checks
+    uses: ./.github/workflows/_checks.yml
+    permissions:
+      contents: read
+    with:
+      fw-version: ${{ inputs.version }}
+      run-coverage: false
+      publish-test-report: false
+
+  release:
+    name: Build & Publish Firmware Binaries
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag or input version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          SEMVER_TAG_RE='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          SEMVER_OPT_V_RE='^[vV]?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [ "$EVENT_NAME" = "push" ]; then
+            if ! [[ "$REF_NAME" =~ $SEMVER_TAG_RE ]]; then
+              echo "::error::Tag '$REF_NAME' must match vMAJOR.MINOR.PATCH[-prerelease][+build]"
+              exit 1
+            fi
+          elif [ -n "$INPUT_VERSION" ]; then
+            if ! [[ "$INPUT_VERSION" =~ $SEMVER_OPT_V_RE ]]; then
+              echo "::error::Input version '$INPUT_VERSION' must be valid SemVer 2.0.0"
+              exit 1
+            fi
+          fi
+
+      - name: Set up PlatformIO
+        uses: ./.github/actions/setup-platformio
+        with:
+          cache-key: ${{ runner.os }}-pio-fw-${{ hashFiles('platformio.ini') }}
+          cache-restore-keys: ${{ runner.os }}-pio-fw-
+
+      - name: Resolve version and release metadata
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          export TANDEM_FW_VERSION="$INPUT_VERSION"
+          VERSION=$(python tools/git_version.py --print-version)
+          COMMIT=$(python tools/git_version.py --print-commit)
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ "v${VERSION}" != "$REF_NAME" ]; then
+              echo "::error::Resolved version 'v${VERSION}' does not match Git tag '${REF_NAME}'"
+              exit 1
+            fi
+            IS_TAG_RELEASE="true"
+            TAG_NAME="$REF_NAME"
+            if [[ "$VERSION" == *-* ]]; then
+              IS_PRERELEASE="true"
+            else
+              IS_PRERELEASE="false"
+            fi
+          else
+            IS_TAG_RELEASE="false"
+            TAG_NAME="v${VERSION}"
+            IS_PRERELEASE="true"
+          fi
+          {
+            echo "version=${VERSION}"
+            echo "commit=${COMMIT}"
+            echo "tag_name=${TAG_NAME}"
+            echo "is_tag_release=${IS_TAG_RELEASE}"
+            echo "is_prerelease=${IS_PRERELEASE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and merge firmware binaries
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          TANDEM_FW_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          mkdir -p release-assets
+          ENVS=(
+            esp32_wroom_stick
+            esp32_wroom_stick_right
+            esp32_s2_stick
+            esp32_s2_base_station
+            esp32_s2_base_station_combined
+            esp32_s3_stick
+            esp32_s3_base_station
+          )
+          for env_name in "${ENVS[@]}"; do
+            echo "=== Building and merging ${env_name} (v${VERSION}) ==="
+            pio run -e "$env_name" -t mergebin
+            cp ".pio/build/${env_name}/firmware-merged.bin" "release-assets/tandem-${env_name}-v${VERSION}-merged.bin"
+          done
+
+      - name: Generate and verify SHA-256 checksums
+        run: |
+          cd release-assets
+          sha256sum *.bin > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Summarize firmware artifacts
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          COMMIT: ${{ steps.meta.outputs.commit }}
+          TAG_NAME: ${{ steps.meta.outputs.tag_name }}
+        run: |
+          {
+            echo "## T.A.N.D.E.M. Firmware Build (${TAG_NAME})"
+            echo ""
+            echo "- **Version:** \`${VERSION}\`"
+            echo "- **Commit:** \`${COMMIT}\`"
+            echo ""
+            echo "| Artifact | Size (bytes) | SHA-256 |"
+            echo "| :--- | ---: | :--- |"
+            while IFS= read -r line; do
+              sha="${line%% *}"
+              file="${line##* }"
+              size=$(wc -c < "release-assets/${file}")
+              echo "| \`${file}\` | ${size} | \`${sha}\` |"
+            done < release-assets/SHA256SUMS.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tandem-firmware-v${{ steps.meta.outputs.version }}
+          path: release-assets/
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: steps.meta.outputs.is_tag_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag_name }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          COMMIT: ${{ steps.meta.outputs.commit }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.is_prerelease }}
+        run: |
+          cat > "${RUNNER_TEMP}/release-notes-header.md" <<EOF
+          **Firmware version:** \`${VERSION}\` (\`${COMMIT}\`)
+
+          ### Flashable Merged Binaries (flash at \`0x0\`)
+
+          | Asset | Target Board | Role / Mode | \`esptool --chip\` |
+          | :--- | :--- | :--- | :--- |
+          | \`tandem-esp32_wroom_stick-v${VERSION}-merged.bin\` | ESP32-WROOM | Left Stick | \`esp32\` |
+          | \`tandem-esp32_wroom_stick_right-v${VERSION}-merged.bin\` | ESP32-WROOM | Right Stick | \`esp32\` |
+          | \`tandem-esp32_s2_stick-v${VERSION}-merged.bin\` | ESP32-S2 Mini | Stick (Native USB) | \`esp32s2\` |
+          | \`tandem-esp32_s2_base_station-v${VERSION}-merged.bin\` | ESP32-S2 Mini | Base Station (Dual HID) | \`esp32s2\` |
+          | \`tandem-esp32_s2_base_station_combined-v${VERSION}-merged.bin\` | ESP32-S2 Mini | Base Station (Combined HID) | \`esp32s2\` |
+          | \`tandem-esp32_s3_stick-v${VERSION}-merged.bin\` | ESP32-S3 | Stick | \`esp32s3\` |
+          | \`tandem-esp32_s3_base_station-v${VERSION}-merged.bin\` | ESP32-S3 | Base Station | \`esp32s3\` |
+
+          Verify download integrity and flash from offset \`0x0\`:
+
+          \`\`\`bash
+          sha256sum -c SHA256SUMS.txt
+          esptool --chip <chip> write-flash 0x0 tandem-<env>-v${VERSION}-merged.bin
+          \`\`\`
+
+          Configure calibration, curves, and deadzones at https://bibi2424.github.io/TANDEM/
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            ARGS=(
+              release create "$TAG" release-assets/*
+              --verify-tag
+              --title "T.A.N.D.E.M. ${TAG}"
+              --notes "$(cat "${RUNNER_TEMP}/release-notes-header.md")"
+              --generate-notes
+            )
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              ARGS+=(--prerelease)
+            fi
+            gh "${ARGS[@]}"
+          fi

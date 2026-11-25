@@ -1,0 +1,46 @@
+name: Set up PlatformIO
+description: Set up Python 3.11, restore optional PlatformIO package cache, and install PlatformIO CLI.
+
+inputs:
+  cache-key:
+    description: Optional cache key for ~/.cache/pip and ~/.platformio (leave empty to skip caching).
+    required: false
+    default: ""
+  cache-restore-keys:
+    description: Optional newline-separated restore-keys prefix for the PlatformIO cache.
+    required: false
+    default: ""
+  extra-packages:
+    description: Optional space-separated extra pip packages to install alongside platformio (e.g. gcovr).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Cache PlatformIO & pip
+      if: inputs.cache-key != ''
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.platformio
+        key: ${{ inputs.cache-key }}
+        restore-keys: ${{ inputs.cache-restore-keys }}
+
+    - name: Install PlatformIO
+      shell: bash
+      env:
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+      run: |
+        if [ -n "$EXTRA_PACKAGES" ]; then
+          read -r -a extra <<< "$EXTRA_PACKAGES"
+          python -m pip install --upgrade pip platformio "${extra[@]}"
+        else
+          python -m pip install --upgrade pip platformio
+        fi
