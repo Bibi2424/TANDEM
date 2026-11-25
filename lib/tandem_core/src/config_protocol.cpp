@@ -109,6 +109,7 @@ bool append_transports_array(char* out,
       {kTransportMaskBleConfig, "BLE_CFG"},
       {kTransportMaskEspNowRx, "ESPNOW_RX"},
       {kTransportMaskUsbSerial, "USB_SERIAL"},
+      {kTransportMaskWebHid, "WEBHID"},
   };
   if (!append_fmt(out, out_size, pos, "[")) {
     return false;

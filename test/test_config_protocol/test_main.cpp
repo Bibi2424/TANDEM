@@ -262,6 +262,21 @@ void test_live_response_with_partial_telemetry() {
   TEST_ASSERT_NULL(std::strstr(out, "\"bat_mv\""));
 }
 
+void test_caps_includes_webhid_transport() {
+  DeviceCapabilities caps{};
+  caps.board = "ESP32-S2";
+  caps.transport_mode = "USB_HID";
+  caps.transports_mask = kTransportMaskUsbHid | kTransportMaskUsbSerial | kTransportMaskWebHid;
+
+  StickInputConfig cfg{};
+  ConfigCallbacks cbs{};
+  char out[kMaxResponseLength]{};
+
+  const size_t n = process_command("$TANDEM caps", caps, cfg, cbs, out, sizeof(out));
+  TEST_ASSERT_GREATER_THAN(0, n);
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"transports\":[\"USB_HID\",\"USB_SERIAL\",\"WEBHID\"]"));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_caps_response_formats_all_fields);
@@ -272,5 +287,6 @@ int main() {
   RUN_TEST(test_caps_extended_metadata_and_base_station_role);
   RUN_TEST(test_status_command_formats_telemetry_and_rejects_args);
   RUN_TEST(test_live_response_with_partial_telemetry);
+  RUN_TEST(test_caps_includes_webhid_transport);
   return UNITY_END();
 }

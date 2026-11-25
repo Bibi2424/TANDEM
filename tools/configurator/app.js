@@ -7,6 +7,18 @@
   const BLE_RESP_CHAR_UUID = "7a4e0003-6f72-4d61-9c2a-54414e44454d";
   const BLE_LIVE_CHAR_UUID = "7a4e0004-6f72-4d61-9c2a-54414e44454d";
   const BLE_WRITE_CHUNK_BYTES = 20;
+  const HID_CONFIG_USAGE_PAGE = 0xFF54;
+  const HID_CONFIG_USAGE_APP = 0x004D;
+  const HID_FRAME_MAGIC = 0x54;
+  const HID_FRAME_VERSION = 1;
+  const HID_MSG_COMMAND = 1;
+  const HID_MSG_RESPONSE = 2;
+  const HID_MSG_LIVE = 3;
+  const HID_FLAG_START = 0x10;
+  const HID_FLAG_END = 0x20;
+  const HID_RESERVED_MASK = 0xC0;
+  const HID_HEADER_BYTES = 6;
+  const HID_OVERHEAD_BYTES = 8;
   const AXIS_NAMES = ["X", "Y", "Z", "Rx", "Ry", "Rz", "Slider", "Dial"];
   const HAT_LABELS = ["Centered", "N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   const NOISE_WINDOW_SIZE = 60;
@@ -15,6 +27,7 @@
   const els = {
     unsupported: document.getElementById("banner-unsupported"),
     toast: document.getElementById("status-toast"),
+    btnConnectHid: document.getElementById("btn-connect-hid"),
     btnConnect: document.getElementById("btn-connect"),
     btnConnectBle: document.getElementById("btn-connect-ble"),
     btnDisconnect: document.getElementById("btn-disconnect"),
@@ -58,6 +71,8 @@
 
   class SerialTransport {
     constructor(onMessage, onDisconnect) {
+      this.label = "Serial";
+      this.pillKey = "USB_SERIAL";
       this.onMessage = onMessage;
       this.onDisconnect = onDisconnect;
       this.port = null;
@@ -164,6 +179,8 @@
 
   class BleTransport {
     constructor(onMessage, onDisconnect) {
+      this.label = "BLE";
+      this.pillKey = "BLE_CFG";
       this.onMessage = onMessage;
       this.onDisconnect = onDisconnect;
       this.device = null;
@@ -312,6 +329,306 @@
     }
   }
 
+  function crc16CcittFalse(bytes, len) {
+    let crc = 0xFFFF;
+    for (let i = 0; i < len; i++) {
+      crc ^= bytes[i] << 8;
+      for (let bit = 0; bit < 8; bit++) {
+        crc = (crc & 0x8000) !== 0
+          ? ((crc << 1) ^ 0x1021) & 0xFFFF
+          : (crc << 1) & 0xFFFF;
+      }
+    }
+    return crc;
+  }
+
+  function computeHidReportSize(reports) {
+    if (!Array.isArray(reports) || reports.length === 0) {
+      return null;
+    }
+    const report = reports[0];
+    let totalBits = 0;
+    for (const item of report.items || []) {
+      totalBits += (item.reportSize || 0) * (item.reportCount || 0);
+    }
+    const bytes = Math.ceil(totalBits / 8);
+    if (bytes <= 0) {
+      return null;
+    }
+    return { reportId: report.reportId ?? 0, bytes };
+  }
+
+  function findHidConfigCollection(device) {
+    for (const col of device.collections || []) {
+      if (col.usagePage === HID_CONFIG_USAGE_PAGE && col.usage === HID_CONFIG_USAGE_APP) {
+        const input = computeHidReportSize(col.inputReports);
+        const output = computeHidReportSize(col.outputReports);
+        if (input && output) {
+          return {
+            inReportId: input.reportId,
+            inReportBytes: input.bytes,
+            outReportId: output.reportId,
+            outReportBytes: output.bytes,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  class WebHidTransport {
+    constructor(onMessage, onDisconnect) {
+      this.label = "WebHID";
+      this.pillKey = "WEBHID";
+      this.onMessage = onMessage;
+      this.onDisconnect = onDisconnect;
+      this.device = null;
+      this.collection = null;
+      this.pending = new Map();
+      this.reassemblers = new Map();
+      this.closing = false;
+      this.nextSeq = 1;
+      this.encoder = new TextEncoder();
+      this.decoder = new TextDecoder();
+      this.writeQueue = Promise.resolve();
+      this._onInputReport = (ev) => {
+        if (!this.collection || ev.reportId !== this.collection.inReportId) {
+          return;
+        }
+        this._handleChunk(ev.data);
+      };
+      this._onHidDisconnect = (ev) => {
+        if (this.device && ev.device === this.device && !this.closing) {
+          this._rejectPending("Disconnected");
+          this._detachListeners();
+          this.device = null;
+          this.collection = null;
+          this.onDisconnect();
+        }
+      };
+    }
+
+    _rejectPending(reason) {
+      for (const [, waiter] of this.pending) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error(reason));
+      }
+      this.pending.clear();
+    }
+
+    _detachListeners() {
+      if (this.device) {
+        this.device.removeEventListener("inputreport", this._onInputReport);
+      }
+      if (navigator.hid) {
+        navigator.hid.removeEventListener("disconnect", this._onHidDisconnect);
+      }
+    }
+
+    _allocateSeq() {
+      for (let attempt = 0; attempt < 255; attempt++) {
+        const candidate = this.nextSeq;
+        this.nextSeq = (this.nextSeq % 255) + 1;
+        if (!this.pending.has(candidate)) {
+          return candidate;
+        }
+      }
+      throw new Error("Too many in-flight WebHID commands");
+    }
+
+    _handleChunk(dataView) {
+      const bytes = new Uint8Array(
+        dataView.buffer,
+        dataView.byteOffset,
+        dataView.byteLength
+      );
+      if (bytes.length < HID_OVERHEAD_BYTES) return;
+      if (bytes[0] !== HID_FRAME_MAGIC || bytes[1] !== HID_FRAME_VERSION) return;
+
+      const flagsType = bytes[2];
+      if ((flagsType & HID_RESERVED_MASK) !== 0) return;
+
+      const msgType = flagsType & 0x0F;
+      if (msgType !== HID_MSG_RESPONSE && msgType !== HID_MSG_LIVE) return;
+
+      const isStart = (flagsType & HID_FLAG_START) !== 0;
+      const isEnd = (flagsType & HID_FLAG_END) !== 0;
+      const seq = bytes[3];
+      const chunkIdx = bytes[4];
+      const payloadLen = bytes[5];
+
+      if (payloadLen + HID_OVERHEAD_BYTES > bytes.length) return;
+
+      const crcInputLen = HID_HEADER_BYTES + payloadLen;
+      const wireCrc = bytes[crcInputLen] | (bytes[crcInputLen + 1] << 8);
+      if (crc16CcittFalse(bytes, crcInputLen) !== wireCrc) return;
+
+      let state = this.reassemblers.get(msgType);
+      if (isStart) {
+        if (chunkIdx !== 0) {
+          this.reassemblers.delete(msgType);
+          return;
+        }
+        state = { seq, nextIdx: 0, chunks: [], totalLen: 0 };
+        this.reassemblers.set(msgType, state);
+      } else if (!state || state.seq !== seq || state.nextIdx !== chunkIdx) {
+        this.reassemblers.delete(msgType);
+        return;
+      }
+
+      if (state.totalLen + payloadLen > 4096) {
+        this.reassemblers.delete(msgType);
+        return;
+      }
+
+      if (payloadLen > 0) {
+        state.chunks.push(bytes.slice(HID_HEADER_BYTES, HID_HEADER_BYTES + payloadLen));
+        state.totalLen += payloadLen;
+      }
+
+      if (!isEnd) {
+        if (state.nextIdx >= 255) {
+          this.reassemblers.delete(msgType);
+          return;
+        }
+        state.nextIdx += 1;
+        return;
+      }
+
+      this.reassemblers.delete(msgType);
+      const merged = new Uint8Array(state.totalLen);
+      let offset = 0;
+      for (const slice of state.chunks) {
+        merged.set(slice, offset);
+        offset += slice.length;
+      }
+
+      const line = this.decoder.decode(merged).replace(/[\r\n]+$/, "");
+      if (!line.startsWith(RESPONSE_PREFIX)) return;
+
+      try {
+        const msg = JSON.parse(line.slice(RESPONSE_PREFIX.length));
+        if (msgType === HID_MSG_RESPONSE) {
+          const waiter = this.pending.get(seq);
+          if (waiter) {
+            clearTimeout(waiter.timer);
+            this.pending.delete(seq);
+            waiter.resolve(msg);
+          }
+        }
+        this.onMessage(msg);
+      } catch (_) {}
+    }
+
+    async connect() {
+      this.closing = false;
+      this.reassemblers.clear();
+      const devices = await navigator.hid.requestDevice({
+        filters: [{ usagePage: HID_CONFIG_USAGE_PAGE, usage: HID_CONFIG_USAGE_APP }],
+      });
+      if (!devices || devices.length === 0) {
+        throw new Error("No WebHID device selected");
+      }
+      const dev = devices[0];
+      const info = findHidConfigCollection(dev);
+      if (!info) {
+        throw new Error("Selected device does not expose a T.A.N.D.E.M. WebHID collection");
+      }
+      if (
+        info.inReportBytes < HID_OVERHEAD_BYTES + 1 ||
+        info.outReportBytes < HID_OVERHEAD_BYTES + 1
+      ) {
+        throw new Error("Unsupported WebHID report size");
+      }
+      if (!dev.opened) {
+        await dev.open();
+      }
+      this.device = dev;
+      this.collection = info;
+      this.device.addEventListener("inputreport", this._onInputReport);
+      navigator.hid.addEventListener("disconnect", this._onHidDisconnect);
+    }
+
+    async disconnect() {
+      this.closing = true;
+      this._rejectPending("Disconnected");
+      this.reassemblers.clear();
+      this._detachListeners();
+      try {
+        if (this.device && this.device.opened) {
+          await this.device.close();
+        }
+      } catch (_) {}
+      this.device = null;
+      this.collection = null;
+    }
+
+    async sendCommand(cmdLine, expectedCmd, timeoutMs = 3000) {
+      if (!this.device || !this.device.opened || !this.collection) {
+        throw new Error("Not connected");
+      }
+
+      const payload = this.encoder.encode(`$TANDEM ${cmdLine}\n`);
+      const outBytes = this.collection.outReportBytes;
+      const maxPayload = outBytes - HID_OVERHEAD_BYTES;
+      const totalChunks = payload.length === 0 ? 1 : Math.ceil(payload.length / maxPayload);
+      if (totalChunks > 256) {
+        throw new Error("Command exceeds WebHID chunk limit");
+      }
+
+      const seq = this._allocateSeq();
+      const promise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          this.pending.delete(seq);
+          reject(new Error(`Timeout waiting for '${expectedCmd}'`));
+        }, timeoutMs);
+        this.pending.set(seq, { resolve, reject, timer });
+      });
+
+      this.writeQueue = this.writeQueue.then(async () => {
+        if (!this.device || !this.device.opened) {
+          throw new Error("Not connected");
+        }
+        for (let idx = 0; idx < totalChunks; idx++) {
+          const offset = idx * maxPayload;
+          const sliceLen = Math.min(maxPayload, payload.length - offset);
+          const chunk = new Uint8Array(outBytes);
+          let flags = HID_MSG_COMMAND;
+          if (idx === 0) flags |= HID_FLAG_START;
+          if (idx + 1 === totalChunks) flags |= HID_FLAG_END;
+
+          chunk[0] = HID_FRAME_MAGIC;
+          chunk[1] = HID_FRAME_VERSION;
+          chunk[2] = flags;
+          chunk[3] = seq;
+          chunk[4] = idx;
+          chunk[5] = sliceLen;
+          if (sliceLen > 0) {
+            chunk.set(payload.subarray(offset, offset + sliceLen), HID_HEADER_BYTES);
+          }
+          const crc = crc16CcittFalse(chunk, HID_HEADER_BYTES + sliceLen);
+          chunk[HID_HEADER_BYTES + sliceLen] = crc & 0xFF;
+          chunk[HID_HEADER_BYTES + sliceLen + 1] = (crc >> 8) & 0xFF;
+
+          await this.device.sendReport(this.collection.outReportId, chunk);
+        }
+      });
+
+      try {
+        await this.writeQueue;
+      } catch (err) {
+        const waiter = this.pending.get(seq);
+        if (waiter) {
+          clearTimeout(waiter.timer);
+          this.pending.delete(seq);
+        }
+        throw err;
+      }
+
+      return promise;
+    }
+  }
+
   const state = {
     connected: false,
     caps: null,
@@ -330,9 +647,11 @@
     gamepadRafId: null,
   };
 
+  const hasHid = "hid" in navigator;
   const hasSerial = "serial" in navigator;
   const hasBle = "bluetooth" in navigator;
   const hasGamepadApi = "getGamepads" in navigator;
+  const webHidTransport = new WebHidTransport(handleMessage, handleUnexpectedDisconnect);
   const serialTransport = new SerialTransport(handleMessage, handleUnexpectedDisconnect);
   const bleTransport = new BleTransport(handleMessage, handleUnexpectedDisconnect);
   let transport = serialTransport;
@@ -511,7 +830,21 @@
     if (Array.isArray(caps.transports) && caps.transports.length > 0) {
       for (const tx of caps.transports) {
         const pill = document.createElement("span");
-        pill.className = `tx-pill${tx === caps.mode ? " active" : ""}`;
+        const isMode =
+          tx === caps.mode ||
+          (caps.role === "BASE" && (tx === "USB_HID" || tx === "ESPNOW_RX"));
+        const isLink = tx === transport?.pillKey;
+        const classes = ["tx-pill"];
+        if (isMode) classes.push("active");
+        if (isLink && !isMode) classes.push("active-link");
+        pill.className = classes.join(" ");
+        if (isMode && isLink) {
+          pill.title = "Active mode & configurator transport";
+        } else if (isMode) {
+          pill.title = "Active device mode";
+        } else if (isLink) {
+          pill.title = "Active configurator transport";
+        }
         pill.textContent = tx;
         els.valTransports.appendChild(pill);
       }
@@ -560,6 +893,7 @@
   function setConnectedUi(connected) {
     state.connected = connected;
     const cfgAllowed = connected && state.caps?.cfg !== false;
+    els.btnConnectHid.disabled = connected || !hasHid;
     els.btnConnect.disabled = connected || !hasSerial;
     els.btnConnectBle.disabled = connected || !hasBle;
     els.btnDisconnect.disabled = !connected;
@@ -569,7 +903,7 @@
     els.btnSweepAll.disabled = !cfgAllowed;
     els.btnApplyAll.disabled = !cfgAllowed;
     els.btnSourceDevice.disabled = !connected;
-    els.valStatus.textContent = connected ? "Connected" : "Disconnected";
+    els.valStatus.textContent = connected ? `Connected (${transport.label})` : "Disconnected";
 
     if (!connected) {
       state.caps = null;
@@ -947,7 +1281,7 @@
     if (pads.length === 0) {
       if (state.renderedLiveKey !== "gp-empty") {
         state.renderedLiveKey = "gp-empty";
-        els.liveCardsContainer.innerHTML = `<p class="muted">No active browser Gamepad detected yet. Plug in or pair a USB/BLE controller and press any button or move a stick to wake Chrome/Edge's Gamepad API, or connect above via <strong>Connect USB</strong> / <strong>Connect BLE</strong>.</p>`;
+        els.liveCardsContainer.innerHTML = `<p class="muted">No active browser Gamepad detected yet. Plug in or pair a USB/BLE controller and press any button or move a stick to wake Chrome/Edge's Gamepad API, or connect above via <strong>Connect WebHID</strong> / <strong>Connect Serial</strong> / <strong>Connect BLE</strong>.</p>`;
       }
       return;
     }
@@ -1114,7 +1448,7 @@
 
   function renderAxes() {
     if (!state.caps || state.axes.length === 0) {
-      els.axesGrid.innerHTML = `<p class="muted">Connect a T.A.N.D.E.M. stick over USB (WebSerial) or BLE (<code>BLE_CFG</code> mode — no OS Bluetooth pairing needed).</p>`;
+      els.axesGrid.innerHTML = `<p class="muted">Connect a T.A.N.D.E.M. stick over USB (<strong>WebHID</strong> or <strong>WebSerial</strong>) or BLE (<code>BLE_CFG</code> mode — no OS Bluetooth pairing needed).</p>`;
       return;
     }
     if (state.caps.cfg === false) {
@@ -1326,6 +1660,7 @@
     }
   }
 
+  els.btnConnectHid.addEventListener("click", () => connectWith(webHidTransport));
   els.btnConnect.addEventListener("click", () => connectWith(serialTransport));
   els.btnConnectBle.addEventListener("click", () => connectWith(bleTransport));
 
@@ -1424,9 +1759,10 @@
     renderLiveCards();
   });
 
-  if (!hasSerial && !hasBle) {
+  if (!hasHid && !hasSerial && !hasBle) {
     els.unsupported.classList.remove("hidden");
   }
+  els.btnConnectHid.disabled = !hasHid;
   els.btnConnect.disabled = !hasSerial;
   els.btnConnectBle.disabled = !hasBle;
   switchTab("live");

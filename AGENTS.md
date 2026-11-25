@@ -46,13 +46,13 @@
 - **Build tool:** PlatformIO (`pio` via `%USERPROFILE%\.platformio\penv\Scripts`), configured in [platformio.ini](platformio.ini).
 - **Directory layout:**
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
-  - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner and NVS config persistence adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig`.
+  - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner, NVS config persistence, and `HidConfigEndpoint` RTOS queue/TX adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
-  - `tools/configurator/` — Static zero-build WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
+  - `tools/configurator/` — Static zero-build WebHID, WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
   - `tools/git_version.py` — PlatformIO `pre:` script injecting `TANDEM_GIT_COMMIT` for firmware identity reporting.
   - `tools/format_coverage_summary.py` — Renders JUnit XML, `gcovr --json`, and PR diff coverage into a Markdown report for GitHub Actions step summaries and sticky PR comments.
-  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_ble_config_gatt/`, `test/test_config_protocol/`, `test/test_config_storage/`, `test/test_device_name/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
+  - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_ble_config_gatt/`, `test/test_config_protocol/`, `test/test_config_storage/`, `test/test_device_name/`, `test/test_hid_config_transport/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
   - Native unit tests with coverage: `pio test -e native_cov`
@@ -92,6 +92,10 @@
 
 - **Human-controlled workflow phases (HARD GATE):** Transitions between workflow phases are strictly human-controlled. AI agents **MUST STOP and ask explicit permission before committing, pushing, or opening a PR** — **after** the final edits and verification checks are complete. Never infer permission to commit, push, or open a PR from an earlier approval (e.g., "do the code change" or an earlier "you can open a PR" prior to additional edits).
 - **Issue hierarchy:** Track work in GitHub Issues (`Bibi2424/TANDEM`) using native **Feature** issues as top-level parents, broken into PR-sized **Task** sub-issues only when ready to implement them (and **Bug** issues for defects).
+- **Release milestones & Project tracking:**
+  - Use native **GitHub Milestones** (e.g., `v0.1.0-alpha`, `v0.2.0-alpha`, `v0.3.0-beta`, `v1.0.0`) as the single source of truth for release targeting; GitHub Projects v2 exposes Milestones natively for "By Release" board/roadmap views (do not create redundant `release:*` labels).
+  - Assign Milestones to **Tasks** and **Bugs**, not to multi-release umbrella **Features** (`#2`, `#6`, `#7`, `#8`). For unsplit future **Features** (`#51`, `#64`, `#72`, `#73`), assign the Feature to its target Milestone as a roadmap placeholder until split into Tasks, then move the Milestone onto those Tasks.
+  - Align Milestone names 1-to-1 with Git tags and GitHub Releases; archive completed milestones (such as `v0.0.0-prototype`) as closed.
 - **Assignment:** Assign active issues (tasks being worked on, and their parent feature when active) to `Bibi2424` when starting work on them.
 - **Branching:** Do not work or commit directly on `main`; create a topic branch (e.g., `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`) for all new changes.
 - **Commits:** Use Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`) and reference relevant issue numbers (e.g., `(#9)`), matching existing repo history.
