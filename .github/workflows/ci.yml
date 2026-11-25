@@ -18,6 +18,9 @@ jobs:
   native-tests:
     name: Native Unit Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,11 +40,44 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pio-native-
 
-      - name: Install PlatformIO
-        run: python -m pip install --upgrade pip platformio
+      - name: Install PlatformIO & gcovr
+        run: python -m pip install --upgrade pip platformio gcovr
 
       - name: Run native unit tests
-        run: pio test -e native -v
+        run: |
+          mkdir -p test-results
+          pio test -e native -v --junit-output-path test-results/junit.xml
+
+      - name: Publish unit test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          junit_files: "test-results/**/*.xml"
+          check_name: "Native Unit Test Results"
+          comment_mode: "off"
+          job_summary: "true"
+
+      - name: Run native coverage tests
+        run: |
+          rm -rf .pio/build/native_cov
+          pio test -e native_cov
+
+      - name: Generate tandem_core coverage report
+        run: |
+          mkdir -p coverage
+          gcovr --root . --filter lib/tandem_core/ \
+            --exclude-unreachable-branches --exclude-throw-branches \
+            --txt \
+            --json-summary coverage/summary.json \
+            --html-details coverage/index.html
+          python tools/format_coverage_summary.py coverage/summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: tandem-core-coverage-html
+          path: coverage/
+          retention-days: 14
 
   firmware-builds:
     name: Firmware Builds

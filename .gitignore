@@ -28,3 +28,10 @@ desktop.ini
 .env
 *.key
 *.pem
+
+# Test & coverage outputs
+coverage/
+test-results/
+*.gcda
+*.gcno
+*.gcov
