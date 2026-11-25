@@ -34,17 +34,20 @@ A DIY dual-joystick (HOSAS) controller system built around a portable, hardware-
 
 ```text
 TANDEM/
-├── .github/workflows/ci.yml   # GitHub Actions CI (native tests + firmware builds)
-├── .github/workflows/pages.yml# GitHub Pages deployment for tools/configurator/
-├── docs/requirements.md       # Baseline hardware, firmware, and verification requirements
-├── include/boards/            # Per-board capability flags and ADC1/GPIO pinmaps
-├── lib/tandem_core/           # Pure, dependency-free C++17 core library (host-testable)
-├── src/apps/                  # Standalone firmware apps selected via build_src_filter
-├── tools/configurator/        # Zero-build WebSerial & Web Bluetooth configurator (GitHub Pages)
-├── test/                      # Native host Unity unit tests (core, axis shaping, input pipeline)
-├── platformio.ini             # PlatformIO environments (native, ESP32-WROOM, ESP32-S2, ESP32-S3)
-├── AGENTS.md                  # Repository development & coding conventions
-└── LICENSE                    # MIT License
+├── .github/workflows/ci.yml           # GitHub Actions CI (format, native tests, firmware builds)
+├── .github/workflows/pages.yml        # GitHub Pages deployment for tools/configurator/
+├── .github/workflows/release.yml      # Tagged SemVer release builds (merged 0x0 binaries + checksums)
+├── docs/quickstart.md                 # End-user flashing, pinouts, mode switching & configurator guide
+├── docs/hil_release_checklist.md      # Release Hardware-in-the-Loop (HIL) smoke-test checklist
+├── docs/requirements.md               # Baseline hardware, firmware, and verification requirements
+├── include/boards/                    # Per-board capability flags and ADC1/GPIO pinmaps
+├── lib/tandem_core/                   # Pure, dependency-free C++17 core library (host-testable)
+├── src/apps/                          # Standalone firmware apps selected via build_src_filter
+├── tools/configurator/                # Zero-build WebHID/WebSerial/Web Bluetooth app (GitHub Pages)
+├── test/                              # Native host Unity unit tests (core, axis shaping, input pipeline)
+├── platformio.ini                     # PlatformIO environments (native, ESP32-WROOM, ESP32-S2, ESP32-S3)
+├── AGENTS.md                          # Repository development & coding conventions
+└── LICENSE                            # MIT License
 ```
 
 ---
@@ -52,7 +55,9 @@ TANDEM/
 ## Getting Started
 
 > [!TIP]
-> **T.A.N.D.E.M. Web Configurator:** **[Open Live Configurator (`bibi2424.github.io/TANDEM`)](https://bibi2424.github.io/TANDEM/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (WebSerial)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
+> **New to T.A.N.D.E.M.?** Start with the **[User Quick-Start Guide](docs/quickstart.md)** for prebuilt `0x0` flashing, board pinouts, `BOOT` button controls, mode switching, and calibration.
+>
+> **Web Configurator:** **[Open Live Configurator (`bibi2424.github.io/TANDEM`)](https://bibi2424.github.io/TANDEM/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (`WebHID` / `WebSerial`)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
 > For **BLE**, switch the stick to `BLE_CFG` (`'4'` on serial or `BOOT` long-press) and click **Connect BLE** directly in Chrome/Edge — **do not** pair `TANDEM-CFG-...` in Windows Bluetooth Settings.
 > Testing local edits? Run `python tools/configurator/serve.py` and open `http://localhost:8000/`.
 
@@ -118,7 +123,10 @@ To get accurate C++ IntelliSense in editors using `clangd`:
 
 ## Documentation & Roadmap
 
+- [User Quick-Start Guide](docs/quickstart.md)
+- [Release HIL Smoke-Test Checklist](docs/hil_release_checklist.md)
 - [Technical Requirements](docs/requirements.md)
+- [C++ Coding Standard](docs/coding_standard.md)
 - [Development & Agent Guidelines](AGENTS.md)
 - [Issue Tracker & Feature Roadmap](https://github.com/Bibi2424/TANDEM/issues)
 
