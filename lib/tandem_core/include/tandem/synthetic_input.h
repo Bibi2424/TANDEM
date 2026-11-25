@@ -13,7 +13,6 @@ namespace tandem {
 /// - 8-way POV hat steps through 0 (centered) and 1..8 every 500 ms.
 /// - StickId::Right shifts axis phases (+90 deg) and button offset (+16) so dual-stick
 ///   transports remain visually distinguishable.
-StickState make_synthetic_stick_state(uint32_t now_ms,
-                                      StickId stick_id = StickId::Left) noexcept;
+StickState make_synthetic_stick_state(uint32_t now_ms, StickId stick_id = StickId::Left) noexcept;
 
 }  // namespace tandem

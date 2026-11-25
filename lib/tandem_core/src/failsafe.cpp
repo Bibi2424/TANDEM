@@ -13,9 +13,7 @@ int16_t clamp_axis_sym(int16_t value) noexcept {
   return value;
 }
 
-StickState sanitize_state(const StickState& in,
-                          uint8_t set_flag,
-                          uint8_t clear_flag) noexcept {
+StickState sanitize_state(const StickState& in, uint8_t set_flag, uint8_t clear_flag) noexcept {
   StickState out = in;
   for (uint8_t i = 0; i < kMaxAxes; ++i) {
     out.axes[i] = clamp_axis_sym(out.axes[i]);
@@ -28,8 +26,7 @@ StickState sanitize_state(const StickState& in,
 
 }  // namespace
 
-FailsafeMonitor::FailsafeMonitor() noexcept
-    : FailsafeMonitor(FailsafeConfig{}) {}
+FailsafeMonitor::FailsafeMonitor() noexcept : FailsafeMonitor(FailsafeConfig{}) {}
 
 FailsafeMonitor::FailsafeMonitor(const FailsafeConfig& config) noexcept {
   set_config(config);
@@ -54,8 +51,7 @@ void FailsafeMonitor::update(uint32_t now_ms) noexcept {
     return;
   }
 
-  if (!is_valid(config_) ||
-      static_cast<uint32_t>(now_ms - last_packet_ms_) >= config_.timeout_ms) {
+  if (!is_valid(config_) || static_cast<uint32_t>(now_ms - last_packet_ms_) >= config_.timeout_ms) {
     status_ = LinkStatus::TimedOut;
     active_state_ = sanitized_failsafe_state_;
   }
@@ -75,8 +71,7 @@ void FailsafeMonitor::reset() noexcept {
 
 void FailsafeMonitor::set_config(const FailsafeConfig& config) noexcept {
   config_ = config;
-  sanitized_failsafe_state_ =
-      sanitize_state(config_.failsafe_state, kStateFlagFailsafe, kStateFlagConnected);
+  sanitized_failsafe_state_ = sanitize_state(config_.failsafe_state, kStateFlagFailsafe, kStateFlagConnected);
   config_.failsafe_state = sanitized_failsafe_state_;
 
   if (status_ != LinkStatus::Connected || !is_valid(config_)) {

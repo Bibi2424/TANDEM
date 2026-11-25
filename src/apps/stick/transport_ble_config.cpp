@@ -57,9 +57,7 @@ void enqueue_command_locked(const char* line, bool overflow) noexcept {
 class ConfigServerCallbacks final : public BLEServerCallbacks {
  public:
   void onConnect(BLEServer*) override { BleConfigTransport::on_connect_cb(); }
-  void onDisconnect(BLEServer*) override {
-    BleConfigTransport::on_disconnect_cb();
-  }
+  void onDisconnect(BLEServer*) override { BleConfigTransport::on_disconnect_cb(); }
 };
 
 class CommandCharCallbacks final : public BLECharacteristicCallbacks {
@@ -70,8 +68,7 @@ class CommandCharCallbacks final : public BLECharacteristicCallbacks {
     }
     const String val = characteristic->getValue();
     if (val.length() > 0) {
-      BleConfigTransport::on_cmd_write_cb(
-          reinterpret_cast<const uint8_t*>(val.c_str()), val.length());
+      BleConfigTransport::on_cmd_write_cb(reinterpret_cast<const uint8_t*>(val.c_str()), val.length());
     }
   }
 };
@@ -81,9 +78,7 @@ CommandCharCallbacks g_cmd_callbacks;
 BLECharacteristic* g_resp_char = nullptr;
 BLECharacteristic* g_live_char = nullptr;
 
-bool notify_chunked(BLECharacteristic* characteristic,
-                    const char* data,
-                    size_t len) noexcept {
+bool notify_chunked(BLECharacteristic* characteristic, const char* data, size_t len) noexcept {
   if (characteristic == nullptr || data == nullptr || len == 0) {
     return false;
   }
@@ -96,11 +91,10 @@ bool notify_chunked(BLECharacteristic* characteristic,
     }
   }
   const size_t chunk_bytes = tandem::config::clamp_ble_chunk_bytes(mtu);
-  tandem::config::for_each_ble_chunk(
-      data, len, chunk_bytes, [characteristic](const uint8_t* ptr, size_t slice) {
-        characteristic->setValue(const_cast<uint8_t*>(ptr), slice);
-        characteristic->notify();
-      });
+  tandem::config::for_each_ble_chunk(data, len, chunk_bytes, [characteristic](const uint8_t* ptr, size_t slice) {
+    characteristic->setValue(const_cast<uint8_t*>(ptr), slice);
+    characteristic->notify();
+  });
   return true;
 }
 
@@ -124,8 +118,7 @@ void BleConfigTransport::on_disconnect_cb() noexcept {
   ble_restart_adv_.store(true, std::memory_order_release);
 }
 
-void BleConfigTransport::on_cmd_write_cb(const uint8_t* data,
-                                         size_t len) noexcept {
+void BleConfigTransport::on_cmd_write_cb(const uint8_t* data, size_t len) noexcept {
   if (data == nullptr || len == 0) {
     return;
   }
@@ -151,8 +144,7 @@ bool BleConfigTransport::init_ble_stack() noexcept {
   if (esp_efuse_mac_get_default(mac) != ESP_OK) {
     std::memset(mac, 0, sizeof(mac));
   }
-  tandem::format_device_name(
-      device_name_, sizeof(device_name_), kConfigDeviceNamePrefix, mac);
+  tandem::format_device_name(device_name_, sizeof(device_name_), kConfigDeviceNamePrefix, mac);
 
   if (!BLEDevice::init(device_name_)) {
     return false;
@@ -161,12 +153,7 @@ bool BleConfigTransport::init_ble_stack() noexcept {
   // Use a deterministic Random Static Address distinct from the public MAC used
   // by BLE_HID so Windows does not mix GATT caches or bond state between modes.
   uint8_t cfg_addr[6] = {
-      static_cast<uint8_t>(mac[5] ^ 0x01U),
-      mac[4],
-      mac[3],
-      mac[2],
-      mac[1],
-      static_cast<uint8_t>((mac[0] ^ 0x02U) | 0xC0U),
+      static_cast<uint8_t>(mac[5] ^ 0x01U), mac[4], mac[3], mac[2], mac[1], static_cast<uint8_t>((mac[0] ^ 0x02U) | 0xC0U),
   };
   BLEDevice::setOwnAddr(cfg_addr);
   BLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
@@ -181,23 +168,16 @@ bool BleConfigTransport::init_ble_stack() noexcept {
   server->setCallbacks(&g_server_callbacks);
   server->advertiseOnDisconnect(false);
 
-  BLEService* service =
-      server->createService(tandem::config::kBleConfigServiceUuid);
+  BLEService* service = server->createService(tandem::config::kBleConfigServiceUuid);
   if (service == nullptr) {
     BLEDevice::deinit(false);
     return false;
   }
 
-  BLECharacteristic* cmd_char = service->createCharacteristic(
-      tandem::config::kBleConfigCommandCharUuid,
-      BLECharacteristic::PROPERTY_WRITE |
-          BLECharacteristic::PROPERTY_WRITE_NR);
-  g_resp_char = service->createCharacteristic(
-      tandem::config::kBleConfigResponseCharUuid,
-      BLECharacteristic::PROPERTY_NOTIFY);
-  g_live_char = service->createCharacteristic(
-      tandem::config::kBleConfigLiveCharUuid,
-      BLECharacteristic::PROPERTY_NOTIFY);
+  BLECharacteristic* cmd_char = service->createCharacteristic(tandem::config::kBleConfigCommandCharUuid,
+                                                              BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  g_resp_char = service->createCharacteristic(tandem::config::kBleConfigResponseCharUuid, BLECharacteristic::PROPERTY_NOTIFY);
+  g_live_char = service->createCharacteristic(tandem::config::kBleConfigLiveCharUuid, BLECharacteristic::PROPERTY_NOTIFY);
 
   if (cmd_char == nullptr || g_resp_char == nullptr || g_live_char == nullptr) {
     g_resp_char = nullptr;
@@ -228,12 +208,7 @@ bool BleConfigTransport::init_ble_stack() noexcept {
   // Use a deterministic Random Static Address distinct from the public MAC used
   // by BLE_HID so Windows does not mix GATT caches or bond state between modes.
   esp_bd_addr_t cfg_addr = {
-      static_cast<uint8_t>((mac[0] ^ 0x02U) | 0xC0U),
-      mac[1],
-      mac[2],
-      mac[3],
-      mac[4],
-      static_cast<uint8_t>(mac[5] ^ 0x01U),
+      static_cast<uint8_t>((mac[0] ^ 0x02U) | 0xC0U), mac[1], mac[2], mac[3], mac[4], static_cast<uint8_t>(mac[5] ^ 0x01U),
   };
   advertising->setDeviceAddress(cfg_addr, BLE_ADDR_TYPE_RANDOM);
 #endif
@@ -301,15 +276,12 @@ bool BleConfigTransport::connected() const noexcept {
   return active_ && ble_connected_.load(std::memory_order_acquire);
 }
 
-bool BleConfigTransport::send(tandem::StickId,
-                              const tandem::StickState&) noexcept {
+bool BleConfigTransport::send(tandem::StickId, const tandem::StickState&) noexcept {
   // Config mode does not emit HID/ESP-NOW input reports; telemetry is sent via send_live().
   return false;
 }
 
-bool BleConfigTransport::pop_command(char* out,
-                                     size_t out_size,
-                                     bool& overflow) noexcept {
+bool BleConfigTransport::pop_command(char* out, size_t out_size, bool& overflow) noexcept {
   if (out == nullptr || out_size == 0) {
     return false;
   }
@@ -363,11 +335,7 @@ void BleConfigTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) 
 }
 
 void BleConfigTransport::format_stats(char* out, size_t out_len) const noexcept {
-  std::snprintf(out,
-                out_len,
-                "conn=%d rx=%lu tx=%lu",
-                connected() ? 1 : 0,
-                static_cast<unsigned long>(rx_cmds_),
+  std::snprintf(out, out_len, "conn=%d rx=%lu tx=%lu", connected() ? 1 : 0, static_cast<unsigned long>(rx_cmds_),
                 static_cast<unsigned long>(tx_frames_));
 }
 

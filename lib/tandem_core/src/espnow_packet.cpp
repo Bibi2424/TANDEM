@@ -37,14 +37,11 @@ void write_u32_le(uint8_t* dst, uint32_t val) noexcept {
 }
 
 uint16_t read_u16_le(const uint8_t* src) noexcept {
-  return static_cast<uint16_t>(static_cast<uint16_t>(src[0]) |
-                               (static_cast<uint16_t>(src[1]) << 8U));
+  return static_cast<uint16_t>(static_cast<uint16_t>(src[0]) | (static_cast<uint16_t>(src[1]) << 8U));
 }
 
 uint32_t read_u32_le(const uint8_t* src) noexcept {
-  return static_cast<uint32_t>(src[0]) |
-         (static_cast<uint32_t>(src[1]) << 8U) |
-         (static_cast<uint32_t>(src[2]) << 16U) |
+  return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8U) | (static_cast<uint32_t>(src[2]) << 16U) |
          (static_cast<uint32_t>(src[3]) << 24U);
 }
 
@@ -68,11 +65,7 @@ uint16_t crc16_ccitt_false(const uint8_t* data, size_t len) noexcept {
   return crc;
 }
 
-bool encode_espnow_packet(StickId stick_id,
-                          uint16_t seq,
-                          const StickState& state,
-                          uint8_t* out,
-                          size_t out_len) noexcept {
+bool encode_espnow_packet(StickId stick_id, uint16_t seq, const StickState& state, uint8_t* out, size_t out_len) noexcept {
   if (out == nullptr || out_len < kEspNowPacketBytes || !is_valid_stick_id(stick_id)) {
     return false;
   }
@@ -99,9 +92,7 @@ bool encode_espnow_packet(StickId stick_id,
   return true;
 }
 
-PacketDecodeResult decode_espnow_packet(const uint8_t* data,
-                                        size_t len,
-                                        DecodedEspNowPacket& out) noexcept {
+PacketDecodeResult decode_espnow_packet(const uint8_t* data, size_t len, DecodedEspNowPacket& out) noexcept {
   if (data == nullptr || len != kEspNowPacketBytes) {
     return PacketDecodeResult::InvalidLength;
   }

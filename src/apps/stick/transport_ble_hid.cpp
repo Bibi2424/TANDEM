@@ -58,8 +58,7 @@ bool BleHidTransport::init_ble_stack() noexcept {
   if (esp_efuse_mac_get_default(mac) != ESP_OK) {
     std::memset(mac, 0, sizeof(mac));
   }
-  tandem::format_device_name(
-      device_name_, sizeof(device_name_), kDeviceNamePrefix, mac);
+  tandem::format_device_name(device_name_, sizeof(device_name_), kDeviceNamePrefix, mac);
 
   if (!BLEDevice::init(device_name_)) {
     return false;
@@ -99,11 +98,8 @@ bool BleHidTransport::init_ble_stack() noexcept {
   g_hid->pnp(0x02, 0xE502, 0xA111, 0x0100);
   g_hid->hidInfo(0x00, 0x01);
 
-  std::memcpy(g_report_map,
-              tandem::kHidJoystickReportDescriptor,
-              tandem::kHidJoystickReportDescriptorBytes);
-  g_hid->reportMap(g_report_map,
-                   static_cast<uint16_t>(tandem::kHidJoystickReportDescriptorBytes));
+  std::memcpy(g_report_map, tandem::kHidJoystickReportDescriptor, tandem::kHidJoystickReportDescriptorBytes);
+  g_hid->reportMap(g_report_map, static_cast<uint16_t>(tandem::kHidJoystickReportDescriptorBytes));
 
   g_hid->startServices();
   g_hid->setBatteryLevel(100);
@@ -179,8 +175,7 @@ bool BleHidTransport::connected() const noexcept {
   return active_ && ble_connected_.load(std::memory_order_acquire);
 }
 
-bool BleHidTransport::send(tandem::StickId,
-                           const tandem::StickState& state) noexcept {
+bool BleHidTransport::send(tandem::StickId, const tandem::StickState& state) noexcept {
   if (!connected() || g_input_report == nullptr) {
     return false;
   }
@@ -197,11 +192,7 @@ void BleHidTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) con
 }
 
 void BleHidTransport::format_stats(char* out, size_t out_len) const noexcept {
-  std::snprintf(out,
-                out_len,
-                "conn=%d sent=%lu",
-                connected() ? 1 : 0,
-                static_cast<unsigned long>(sent_));
+  std::snprintf(out, out_len, "conn=%d sent=%lu", connected() ? 1 : 0, static_cast<unsigned long>(sent_));
 }
 
 }  // namespace tandem::stick

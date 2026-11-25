@@ -1,8 +1,9 @@
+#include <unity.h>
+
 #include <cmath>
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
-#include <unity.h>
 
 #include "tandem/axis_shaping.h"
 
@@ -40,17 +41,14 @@ void test_defaults_validity_and_factories() {
   TEST_ASSERT_TRUE(default_cfg.deadzone == 0.0f);
   TEST_ASSERT_EQUAL_UINT8(0U, static_cast<uint8_t>(tandem::CurveType::Linear));
   TEST_ASSERT_EQUAL_UINT8(1U, static_cast<uint8_t>(tandem::CurveType::Expo));
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::CurveType::Linear),
-                          static_cast<uint8_t>(default_cfg.curve.type));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::CurveType::Linear), static_cast<uint8_t>(default_cfg.curve.type));
 
   const tandem::AxisCurve linear = tandem::make_linear_curve();
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::CurveType::Linear),
-                          static_cast<uint8_t>(linear.type));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::CurveType::Linear), static_cast<uint8_t>(linear.type));
   TEST_ASSERT_TRUE(linear.param == 0.0f);
 
   const tandem::AxisCurve expo = tandem::make_expo_curve(0.4f);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::CurveType::Expo),
-                          static_cast<uint8_t>(expo.type));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::CurveType::Expo), static_cast<uint8_t>(expo.type));
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.4f, expo.param);
 }
 
@@ -80,18 +78,12 @@ void test_calibrate_axis_asymmetric() {
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, -1.0f, tandem::calibrate_axis(0, adc12));
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, tandem::calibrate_axis(4095, adc12));
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, -0.5f, tandem::calibrate_axis(1024, adc12));
-  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1024.0f / 2047.0f,
-                           tandem::calibrate_axis(3072, adc12));
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1024.0f / 2047.0f, tandem::calibrate_axis(3072, adc12));
 }
 
 void test_calibrate_axis_degenerate_bounds() {
   const tandem::AxisCalibration invalid_cases[] = {
-      {0, 0, 100},
-      {0, 100, 100},
-      {100, 50, 200},
-      {0, 200, 100},
-      {200, 100, 0},
-      {100, 100, 100},
+      {0, 0, 100}, {0, 100, 100}, {100, 50, 200}, {0, 200, 100}, {200, 100, 0}, {100, 100, 100},
   };
   const int32_t raw_inputs[] = {0, 100, -100, INT32_MIN, INT32_MAX};
 
@@ -120,8 +112,7 @@ void test_calibrate_axis_int32_extremes() {
   assert_positive_zero(tandem::calibrate_axis(INT32_MIN + 1, skew_low));
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, tandem::calibrate_axis(INT32_MAX, skew_low));
   const float zero_in_skew_low = tandem::calibrate_axis(0, skew_low);
-  TEST_ASSERT_TRUE(std::isfinite(zero_in_skew_low) && zero_in_skew_low > 0.0f &&
-                   zero_in_skew_low <= 1.0f);
+  TEST_ASSERT_TRUE(std::isfinite(zero_in_skew_low) && zero_in_skew_low > 0.0f && zero_in_skew_low <= 1.0f);
   TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.5f, zero_in_skew_low);
 
   const tandem::AxisCalibration skew_high{INT32_MIN, INT32_MAX - 1, INT32_MAX};
@@ -129,8 +120,7 @@ void test_calibrate_axis_int32_extremes() {
   assert_positive_zero(tandem::calibrate_axis(INT32_MAX - 1, skew_high));
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, tandem::calibrate_axis(INT32_MAX, skew_high));
   const float zero_in_skew_high = tandem::calibrate_axis(0, skew_high);
-  TEST_ASSERT_TRUE(std::isfinite(zero_in_skew_high) && zero_in_skew_high >= -1.0f &&
-                   zero_in_skew_high < 0.0f);
+  TEST_ASSERT_TRUE(std::isfinite(zero_in_skew_high) && zero_in_skew_high >= -1.0f && zero_in_skew_high < 0.0f);
   TEST_ASSERT_FLOAT_WITHIN(1e-4f, -0.5f, zero_in_skew_high);
 
   const tandem::AxisCalibration normal_adc{};
@@ -243,12 +233,8 @@ void test_apply_curve_linear_and_expo_exact_values() {
 
 void test_apply_curve_monotonicity_symmetry_and_sign_preservation() {
   const tandem::AxisCurve curves[] = {
-      tandem::make_linear_curve(),
-      tandem::make_expo_curve(0.0f),
-      tandem::make_expo_curve(0.25f),
-      tandem::make_expo_curve(0.5f),
-      tandem::make_expo_curve(0.75f),
-      tandem::make_expo_curve(1.0f),
+      tandem::make_linear_curve(),   tandem::make_expo_curve(0.0f),  tandem::make_expo_curve(0.25f),
+      tandem::make_expo_curve(0.5f), tandem::make_expo_curve(0.75f), tandem::make_expo_curve(1.0f),
   };
 
   for (const auto& curve : curves) {

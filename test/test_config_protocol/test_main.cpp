@@ -65,8 +65,7 @@ void test_set_updates_axis_and_rejects_invalid_inputs() {
   ConfigCallbacks cbs{};
   char out[kMaxResponseLength]{};
 
-  size_t n = process_command("$TANDEM set 2 1 120 2050 3980 0.06 1 1 0.45\r\n",
-                             caps, cfg, cbs, out, sizeof(out));
+  size_t n = process_command("$TANDEM set 2 1 120 2050 3980 0.06 1 1 0.45\r\n", caps, cfg, cbs, out, sizeof(out));
   TEST_ASSERT_GREATER_THAN(0, n);
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"set\",\"ok\":true,\"i\":2"));
   TEST_ASSERT_TRUE(cfg.axes[2].enabled);
@@ -75,30 +74,25 @@ void test_set_updates_axis_and_rejects_invalid_inputs() {
   TEST_ASSERT_EQUAL_INT32(3980, cfg.axes[2].calibration.max);
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.06f, cfg.axes[2].deadzone);
   TEST_ASSERT_TRUE(cfg.axes[2].invert);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(CurveType::Expo),
-                          static_cast<uint8_t>(cfg.axes[2].curve.type));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(CurveType::Expo), static_cast<uint8_t>(cfg.axes[2].curve.type));
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.45f, cfg.axes[2].curve.param);
 
   // Degenerate bounds (min >= center) must be rejected and leave config unchanged.
-  n = process_command("$TANDEM set 2 1 2050 2050 3980 0.06 0 0 0.0",
-                      caps, cfg, cbs, out, sizeof(out));
+  n = process_command("$TANDEM set 2 1 2050 2050 3980 0.06 0 0 0.0", caps, cfg, cbs, out, sizeof(out));
   TEST_ASSERT_GREATER_THAN(0, n);
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_bounds\""));
   TEST_ASSERT_EQUAL_INT32(120, cfg.axes[2].calibration.min);
 
   // Out-of-range axis index.
-  n = process_command("$TANDEM set 8 1 0 2048 4095 0.05 0 0 0.0",
-                      caps, cfg, cbs, out, sizeof(out));
+  n = process_command("$TANDEM set 8 1 0 2048 4095 0.05 0 0 0.0", caps, cfg, cbs, out, sizeof(out));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_axis\""));
 
   // Deadzone >= 1.0.
-  n = process_command("$TANDEM set 0 1 0 2048 4095 1.0 0 0 0.0",
-                      caps, cfg, cbs, out, sizeof(out));
+  n = process_command("$TANDEM set 0 1 0 2048 4095 1.0 0 0 0.0", caps, cfg, cbs, out, sizeof(out));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_deadzone\""));
 
   // Unknown curve type.
-  n = process_command("$TANDEM set 0 1 0 2048 4095 0.05 0 2 0.0",
-                      caps, cfg, cbs, out, sizeof(out));
+  n = process_command("$TANDEM set 0 1 0 2048 4095 0.05 0 2 0.0", caps, cfg, cbs, out, sizeof(out));
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_curve\""));
 }
 
@@ -111,9 +105,7 @@ void test_live_save_and_reset_callbacks() {
 
   ConfigCallbacks cbs{};
   cbs.ctx = &hook;
-  cbs.on_live_changed = [](void* ctx, bool enabled) {
-    static_cast<HookState*>(ctx)->live_enabled = enabled;
-  };
+  cbs.on_live_changed = [](void* ctx, bool enabled) { static_cast<HookState*>(ctx)->live_enabled = enabled; };
   cbs.on_reset = [](void* ctx) -> bool {
     static_cast<HookState*>(ctx)->reset_calls++;
     return true;

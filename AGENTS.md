@@ -45,27 +45,31 @@
 
 - **Build tool:** PlatformIO (`pio` via `%USERPROFILE%\.platformio\penv\Scripts`), configured in [platformio.ini](platformio.ini).
 - **Directory layout:**
+  - `.clang-format` / `.editorconfig` — Authoritative C++17 formatting rules (Google style with 150-column limit) and cross-language editor defaults; detailed guidelines live in [docs/coding_standard.md](docs/coding_standard.md).
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
   - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner, NVS config persistence, and `HidConfigEndpoint` RTOS queue/TX adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `tools/configurator/` — Static zero-build WebHID, WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
+  - `tools/check_format.py` — Runs `clang-format --dry-run --Werror` (or `--fix`) over C/C++ files in `include/`, `lib/`, `src/`, `test/` using the CI-pinned `clang-format` version.
   - `tools/git_version.py` — PlatformIO `pre:` script injecting `TANDEM_GIT_COMMIT` for firmware identity reporting.
   - `tools/format_coverage_summary.py` — Renders JUnit XML, `gcovr --json`, and PR diff coverage into a Markdown report for GitHub Actions step summaries and sticky PR comments.
   - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_ble_config_gatt/`, `test/test_config_protocol/`, `test/test_config_storage/`, `test/test_device_name/`, `test/test_hid_config_transport/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
 - **Defined environments & commands:**
+  - C++ format check / auto-fix: `python tools/check_format.py` (`--fix` to format in-place, `--strict-version` to enforce the CI-pinned binary)
   - Native unit tests: `pio test -e native`
   - Native unit tests with coverage: `pio test -e native_cov`
   - Unified capability-gated stick firmware (`src/apps/stick/` — USB HID, BLE HID, ESP-NOW TX, and BLE GATT Config with mutually exclusive radio teardown; optional `-DTANDEM_DEFAULT_TRANSPORT_MODE=0|1|2|3`, `-DTANDEM_STICK_SYNTHETIC_DEFAULT`): `pio run -e esp32_s3_stick`, `pio run -e esp32_wroom_stick` (Left) / `esp32_wroom_stick_right` (Right), `pio run -e esp32_s2_stick`
   - USB Base Station (`ESP32-S2` / `ESP32-S3`, Dual or Combined USB HID + failsafe): `pio run -e esp32_s2_base_station` (Dual) / `esp32_s2_base_station_combined` (Combined), `pio run -e esp32_s3_base_station`
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
-- **CI & Pages:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` (publishing JUnit XML results via `dorny/test-reporter`), `pio test -e native_cov` (publishing `lib/tandem_core/` `gcovr` + PR diff coverage to the step summary, a sticky same-repo PR comment, and an HTML report artifact), and `pio run` on pushes to `main` and pull requests; [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
+- **CI & Pages:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `C++ Format Check` (`python tools/check_format.py --strict-version`), `pio test -e native -v` (publishing JUnit XML results via `dorny/test-reporter`), `pio test -e native_cov` (publishing `lib/tandem_core/` `gcovr` + PR diff coverage to the step summary, a sticky same-repo PR comment, and an HTML report artifact), and `pio run` on pushes to `main` and pull requests; [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
 
 ---
 
 ## Embedded C++ Coding Guidelines
 
+- **Formatting & style standard:** Follow [docs/coding_standard.md](docs/coding_standard.md) (`.clang-format` based on Google C++17 with a 150-column limit, `.editorconfig` LF/2-space defaults, `#pragma once`, `PascalCase` types, `snake_case` functions/variables, `snake_case_` class members, `kCamelCase` constants, `g_` globals, and `noexcept` on core/HAL APIs).
 - **Real-time hot-path discipline:** Avoid dynamic heap allocation (`new`, `malloc`, growing containers, dynamic string churn) and blocking delays inside input sampling, radio TX/RX, or HID reporting loops.
 - **Concurrency & ISR/callback safety:** Radio, USB, and BLE callbacks often run in interrupt or separate RTOS task contexts. Keep them short and non-blocking; hand data to the main loop via explicit synchronization (queues, mutexes, atomics, or double-buffered snapshots).
 - **Explicit binary layouts:** Use fixed-width integer types (`uint8_t`, `int16_t`, `uint32_t`), explicit endianness/packing, versioning, and `static_assert` size checks for wire packets, HID reports, and persisted config structs.
@@ -80,8 +84,8 @@
 
 1. **Native Host Unit Tests (for Pure Logic)**
    - Unit test code whenever possible. Changes to input shaping (calibration, deadzone rescaling, curves), failsafe timeouts, packet codecs, config schema/CRC validation, or any other host-testable logic must include native host unit tests covering nominal behavior and edge cases (boundaries, sign preservation, degenerate bounds, corrupt CRC, version mismatch, timeouts).
-2. **Affected-Target Builds**
-   - Verify that all affected environments compile and pass cleanly (`pio test -e native` and `pio run` / affected `-e <env>` targets) before finishing.
+2. **Affected-Target Builds & Formatting**
+   - Verify that formatting passes (`python tools/check_format.py`) and all affected environments compile and pass cleanly (`pio test -e native` and `pio run` / affected `-e <env>` targets) before finishing.
 3. **Hardware-in-the-Loop (HIL) Honesty & Pre-PR Gate**
    - Never claim on-hardware behavior (ADC jitter/centering, wireless reliability/drop rates, USB/BLE HID smoothness or polling rate, power-cycle persistence) is verified based solely on compilation or host unit tests. Clearly list remaining hardware checks for the active target board and mode.
    - Code involving modifications only testable on hardware **must be verified on physical hardware before a PR can be opened**, unless the human explicitly specifies otherwise.

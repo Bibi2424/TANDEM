@@ -18,11 +18,9 @@ void test_assembler_handles_chunked_line(void) {
   const size_t len = std::strlen(msg);
 
   for (size_t i = 0; i + 1 < len; ++i) {
-    TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::Incomplete,
-                      assembler.push_byte(static_cast<uint8_t>(msg[i]), out, sizeof(out)));
+    TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::Incomplete, assembler.push_byte(static_cast<uint8_t>(msg[i]), out, sizeof(out)));
   }
-  TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::LineReady,
-                    assembler.push_byte(static_cast<uint8_t>(msg[len - 1]), out, sizeof(out)));
+  TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::LineReady, assembler.push_byte(static_cast<uint8_t>(msg[len - 1]), out, sizeof(out)));
   TEST_ASSERT_EQUAL_STRING("$TANDEM caps", out);
 }
 
@@ -31,11 +29,9 @@ void test_assembler_recovers_after_overflow(void) {
   char out[tandem::config::kMaxCommandLength]{};
 
   for (size_t i = 0; i < tandem::config::kMaxCommandLength + 10; ++i) {
-    TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::Incomplete,
-                      assembler.push_byte('A', out, sizeof(out)));
+    TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::Incomplete, assembler.push_byte('A', out, sizeof(out)));
   }
-  TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::Overflow,
-                    assembler.push_byte('\n', out, sizeof(out)));
+  TEST_ASSERT_EQUAL(BleLineAssembler::FeedResult::Overflow, assembler.push_byte('\n', out, sizeof(out)));
 
   const char* next = "$TANDEM get\n";
   BleLineAssembler::FeedResult last = BleLineAssembler::FeedResult::Incomplete;
@@ -58,14 +54,10 @@ void test_for_each_ble_chunk_reassembles_exact(void) {
   std::string reassembled;
   std::vector<size_t> sizes;
 
-  tandem::config::for_each_ble_chunk(
-      payload.data(),
-      payload.size(),
-      20,
-      [&](const uint8_t* ptr, size_t slice_len) {
-        sizes.push_back(slice_len);
-        reassembled.append(reinterpret_cast<const char*>(ptr), slice_len);
-      });
+  tandem::config::for_each_ble_chunk(payload.data(), payload.size(), 20, [&](const uint8_t* ptr, size_t slice_len) {
+    sizes.push_back(slice_len);
+    reassembled.append(reinterpret_cast<const char*>(ptr), slice_len);
+  });
 
   TEST_ASSERT_EQUAL_UINT32(2, sizes.size());
   TEST_ASSERT_EQUAL_UINT32(20, sizes[0]);

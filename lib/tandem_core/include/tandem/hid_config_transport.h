@@ -26,8 +26,7 @@ inline constexpr uint8_t kHidConfigFrameMagic = 0x54U;  // 'T'
 inline constexpr uint8_t kHidConfigFrameVersion = 1U;
 inline constexpr size_t kHidConfigHeaderBytes = 6U;
 inline constexpr size_t kHidConfigCrcBytes = 2U;
-inline constexpr size_t kHidConfigChunkOverheadBytes =
-    kHidConfigHeaderBytes + kHidConfigCrcBytes;
+inline constexpr size_t kHidConfigChunkOverheadBytes = kHidConfigHeaderBytes + kHidConfigCrcBytes;
 inline constexpr size_t kHidConfigMinReportBytes = kHidConfigChunkOverheadBytes + 1U;
 inline constexpr size_t kHidConfigMaxReportBytes = 255U;
 
@@ -52,9 +51,7 @@ static_assert(sizeof(HidConfigReportDescriptor) == kHidConfigReportDescriptorByt
 
 /// Builds a HID 1.11 Vendor-Defined Top-Level Collection descriptor with the given
 /// Report ID and fixed byte-array report payload size (`report_bytes`, excluding Report ID).
-constexpr HidConfigReportDescriptor make_hid_config_report_descriptor(
-    uint8_t report_id,
-    uint8_t report_bytes) noexcept {
+constexpr HidConfigReportDescriptor make_hid_config_report_descriptor(uint8_t report_id, uint8_t report_bytes) noexcept {
   HidConfigReportDescriptor desc{{
       0x06U,
       static_cast<uint8_t>(kHidConfigUsagePage & 0xFFU),
@@ -97,9 +94,7 @@ constexpr HidConfigReportDescriptor make_hid_config_report_descriptor(
 }
 
 inline constexpr HidConfigReportDescriptor kHidConfigUsbReportDescriptor =
-    make_hid_config_report_descriptor(
-        kHidReportIdConfigUsb,
-        static_cast<uint8_t>(kHidConfigUsbReportBytes));
+    make_hid_config_report_descriptor(kHidReportIdConfigUsb, static_cast<uint8_t>(kHidConfigUsbReportBytes));
 
 /// Splits an arbitrary config command/response/live frame into fixed-size zero-padded
 /// HID chunks with sequence numbering and per-chunk CRC-16/CCITT-FALSE integrity checks.
@@ -107,11 +102,7 @@ class HidConfigChunkEncoder {
  public:
   /// Starts encoding `payload[0..payload_len)` for reports of `report_bytes` bytes.
   /// Returns false on invalid arguments or if chunk count would exceed 256.
-  bool begin(HidConfigMsgType type,
-             uint8_t seq,
-             const uint8_t* payload,
-             size_t payload_len,
-             size_t report_bytes = kHidConfigUsbReportBytes) noexcept;
+  bool begin(HidConfigMsgType type, uint8_t seq, const uint8_t* payload, size_t payload_len, size_t report_bytes = kHidConfigUsbReportBytes) noexcept;
 
   /// Returns true when at least one chunk remains to be emitted.
   bool has_next() const noexcept;
@@ -160,9 +151,7 @@ class HidConfigReassembler {
   void reset() noexcept;
 
   /// Validates and consumes one HID report payload (excluding HID Report ID).
-  FeedResult push_chunk(const uint8_t* chunk,
-                        size_t chunk_len,
-                        HidConfigMessageView& out) noexcept;
+  FeedResult push_chunk(const uint8_t* chunk, size_t chunk_len, HidConfigMessageView& out) noexcept;
 
  private:
   char* storage_{nullptr};

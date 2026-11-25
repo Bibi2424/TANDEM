@@ -1,6 +1,7 @@
 #include "tandem_hal/input_scanner.h"
 
 #include <Arduino.h>
+
 #include <cmath>
 
 #include "tandem/input_pipeline.h"
@@ -61,8 +62,7 @@ bool InputScanner::DebouncedPin::update(uint32_t now_ms, uint16_t debounce_ms) n
   if (raw_pressed != last_raw_pressed) {
     last_raw_pressed = raw_pressed;
     last_change_ms = now_ms;
-  } else if (raw_pressed != stable_pressed &&
-             static_cast<uint32_t>(now_ms - last_change_ms) >= debounce_ms) {
+  } else if (raw_pressed != stable_pressed && static_cast<uint32_t>(now_ms - last_change_ms) >= debounce_ms) {
     stable_pressed = raw_pressed;
   }
   return stable_pressed;
@@ -126,8 +126,7 @@ void InputScanner::sample(uint32_t now_ms, tandem::RawStickInput& out) noexcept 
   out.hat = encode_hat_4way(north, east, south, west);
 }
 
-tandem::StickInputConfig make_default_input_config(
-    const InputScannerConfig& scanner_cfg, float deadzone) noexcept {
+tandem::StickInputConfig make_default_input_config(const InputScannerConfig& scanner_cfg, float deadzone) noexcept {
   tandem::StickInputConfig cfg{};
 
   uint8_t adc_bits = scanner_cfg.adc_bits;

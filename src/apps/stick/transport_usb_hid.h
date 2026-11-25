@@ -9,6 +9,7 @@
 #if TANDEM_CAP_NATIVE_USB
 
 #include <USBHID.h>
+
 #include "tandem/hid_config_transport.h"
 #include "tandem_hal/hid_config_endpoint.h"
 
@@ -52,8 +53,7 @@ class TandemUsbConfigHid final : public USBHIDDevice {
   void handle_rx_chunk(uint8_t report_id, const uint8_t* buffer, uint16_t len) noexcept;
 
   mutable USBHID hid_{};
-  tandem::hal::HidConfigEndpoint endpoint_{
-      tandem::config::kHidConfigUsbReportBytes};
+  tandem::hal::HidConfigEndpoint endpoint_{tandem::config::kHidConfigUsbReportBytes};
 };
 
 class UsbHidTransport final : public StickTransport {
@@ -66,8 +66,7 @@ class UsbHidTransport final : public StickTransport {
   bool start() noexcept override;
   void stop() noexcept override;
   void fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept override;
-  bool send(tandem::StickId stick_id,
-            const tandem::StickState& state) noexcept override;
+  bool send(tandem::StickId stick_id, const tandem::StickState& state) noexcept override;
   void format_stats(char* out, size_t out_len) const noexcept override;
 
   template <typename Handler>

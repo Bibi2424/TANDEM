@@ -8,14 +8,12 @@ namespace tandem::config {
 namespace {
 
 bool is_valid_msg_type(uint8_t raw) noexcept {
-  return raw == static_cast<uint8_t>(HidConfigMsgType::Command) ||
-         raw == static_cast<uint8_t>(HidConfigMsgType::Response) ||
+  return raw == static_cast<uint8_t>(HidConfigMsgType::Command) || raw == static_cast<uint8_t>(HidConfigMsgType::Response) ||
          raw == static_cast<uint8_t>(HidConfigMsgType::Live);
 }
 
 bool is_valid_report_bytes(size_t report_bytes) noexcept {
-  return report_bytes >= kHidConfigMinReportBytes &&
-         report_bytes <= kHidConfigMaxReportBytes;
+  return report_bytes >= kHidConfigMinReportBytes && report_bytes <= kHidConfigMaxReportBytes;
 }
 
 void write_u16_le(uint8_t* dst, uint16_t val) noexcept {
@@ -24,20 +22,14 @@ void write_u16_le(uint8_t* dst, uint16_t val) noexcept {
 }
 
 uint16_t read_u16_le(const uint8_t* src) noexcept {
-  return static_cast<uint16_t>(static_cast<uint16_t>(src[0]) |
-                               (static_cast<uint16_t>(src[1]) << 8U));
+  return static_cast<uint16_t>(static_cast<uint16_t>(src[0]) | (static_cast<uint16_t>(src[1]) << 8U));
 }
 
 }  // namespace
 
-bool HidConfigChunkEncoder::begin(HidConfigMsgType type,
-                                  uint8_t seq,
-                                  const uint8_t* payload,
-                                  size_t payload_len,
-                                  size_t report_bytes) noexcept {
+bool HidConfigChunkEncoder::begin(HidConfigMsgType type, uint8_t seq, const uint8_t* payload, size_t payload_len, size_t report_bytes) noexcept {
   reset();
-  if (!is_valid_msg_type(static_cast<uint8_t>(type)) ||
-      !is_valid_report_bytes(report_bytes)) {
+  if (!is_valid_msg_type(static_cast<uint8_t>(type)) || !is_valid_report_bytes(report_bytes)) {
     return false;
   }
   if (payload_len > 0U && payload == nullptr) {
@@ -45,8 +37,7 @@ bool HidConfigChunkEncoder::begin(HidConfigMsgType type,
   }
 
   const size_t max_payload = report_bytes - kHidConfigChunkOverheadBytes;
-  const size_t chunks =
-      (payload_len == 0U) ? 1U : ((payload_len + max_payload - 1U) / max_payload);
+  const size_t chunks = (payload_len == 0U) ? 1U : ((payload_len + max_payload - 1U) / max_payload);
   if (chunks > 256U) {
     return false;
   }
@@ -122,9 +113,7 @@ void HidConfigChunkEncoder::reset() noexcept {
   active_ = false;
 }
 
-HidConfigReassembler::HidConfigReassembler(char* storage,
-                                           size_t capacity) noexcept
-    : storage_(storage), capacity_(capacity) {
+HidConfigReassembler::HidConfigReassembler(char* storage, size_t capacity) noexcept : storage_(storage), capacity_(capacity) {
   reset();
 }
 
@@ -138,14 +127,10 @@ void HidConfigReassembler::reset() noexcept {
   }
 }
 
-HidConfigReassembler::FeedResult HidConfigReassembler::push_chunk(
-    const uint8_t* chunk,
-    size_t chunk_len,
-    HidConfigMessageView& out) noexcept {
+HidConfigReassembler::FeedResult HidConfigReassembler::push_chunk(const uint8_t* chunk, size_t chunk_len, HidConfigMessageView& out) noexcept {
   out = HidConfigMessageView{};
 
-  if (storage_ == nullptr || capacity_ < 2U || chunk == nullptr ||
-      chunk_len < kHidConfigChunkOverheadBytes) {
+  if (storage_ == nullptr || capacity_ < 2U || chunk == nullptr || chunk_len < kHidConfigChunkOverheadBytes) {
     return FeedResult::InvalidChunk;
   }
 
@@ -173,13 +158,11 @@ HidConfigReassembler::FeedResult HidConfigReassembler::push_chunk(
   const uint8_t chunk_idx = chunk[4];
   const uint8_t payload_len = chunk[5];
 
-  if (static_cast<size_t>(payload_len) + kHidConfigChunkOverheadBytes >
-      chunk_len) {
+  if (static_cast<size_t>(payload_len) + kHidConfigChunkOverheadBytes > chunk_len) {
     return FeedResult::InvalidChunk;
   }
 
-  const size_t crc_input_len =
-      kHidConfigHeaderBytes + static_cast<size_t>(payload_len);
+  const size_t crc_input_len = kHidConfigHeaderBytes + static_cast<size_t>(payload_len);
   const uint16_t expected_crc = tandem::crc16_ccitt_false(chunk, crc_input_len);
   const uint16_t wire_crc = read_u16_le(&chunk[crc_input_len]);
   if (wire_crc != expected_crc) {
@@ -197,8 +180,7 @@ HidConfigReassembler::FeedResult HidConfigReassembler::push_chunk(
     seq_ = seq;
     next_idx_ = 0U;
   } else {
-    if (!active_ || msg_type != type_ || seq != seq_ ||
-        chunk_idx != next_idx_) {
+    if (!active_ || msg_type != type_ || seq != seq_ || chunk_idx != next_idx_) {
       reset();
       return FeedResult::SequenceError;
     }
@@ -260,9 +242,7 @@ void HidConfigTxQueue::reset() noexcept {
   has_current_chunk_ = false;
 }
 
-bool HidConfigTxQueue::enqueue_response(uint8_t seq,
-                                        const char* data,
-                                        size_t len) noexcept {
+bool HidConfigTxQueue::enqueue_response(uint8_t seq, const char* data, size_t len) noexcept {
   if (len > kMaxResponseLength || (len > 0U && data == nullptr)) {
     return false;
   }
@@ -275,12 +255,7 @@ bool HidConfigTxQueue::enqueue_response(uint8_t seq,
     if (len > 0U) {
       std::memcpy(active_buf_, data, len);
     }
-    return encoder_.begin(
-        HidConfigMsgType::Response,
-        seq,
-        reinterpret_cast<const uint8_t*>(active_buf_),
-        len,
-        report_bytes_);
+    return encoder_.begin(HidConfigMsgType::Response, seq, reinterpret_cast<const uint8_t*>(active_buf_), len, report_bytes_);
   }
 
   if (len > 0U) {
@@ -318,12 +293,7 @@ bool HidConfigTxQueue::start_next_message() noexcept {
     const size_t len = resp_len_;
     has_resp_ = false;
     resp_len_ = 0U;
-    return encoder_.begin(
-        HidConfigMsgType::Response,
-        seq,
-        reinterpret_cast<const uint8_t*>(active_buf_),
-        len,
-        report_bytes_);
+    return encoder_.begin(HidConfigMsgType::Response, seq, reinterpret_cast<const uint8_t*>(active_buf_), len, report_bytes_);
   }
 
   if (has_live_) {
@@ -334,19 +304,13 @@ bool HidConfigTxQueue::start_next_message() noexcept {
     const uint8_t seq = live_seq_++;
     has_live_ = false;
     live_len_ = 0U;
-    return encoder_.begin(
-        HidConfigMsgType::Live,
-        seq,
-        reinterpret_cast<const uint8_t*>(active_buf_),
-        len,
-        report_bytes_);
+    return encoder_.begin(HidConfigMsgType::Live, seq, reinterpret_cast<const uint8_t*>(active_buf_), len, report_bytes_);
   }
 
   return false;
 }
 
-bool HidConfigTxQueue::peek_chunk(const uint8_t*& data_out,
-                                  size_t& len_out) noexcept {
+bool HidConfigTxQueue::peek_chunk(const uint8_t*& data_out, size_t& len_out) noexcept {
   data_out = nullptr;
   len_out = 0U;
 
@@ -365,7 +329,9 @@ bool HidConfigTxQueue::peek_chunk(const uint8_t*& data_out,
   return true;
 }
 
-void HidConfigTxQueue::consume_chunk() noexcept { has_current_chunk_ = false; }
+void HidConfigTxQueue::consume_chunk() noexcept {
+  has_current_chunk_ = false;
+}
 
 bool HidConfigTxQueue::has_pending() const noexcept {
   return has_current_chunk_ || encoder_.has_next() || has_resp_ || has_live_;

@@ -19,9 +19,7 @@ struct AxisCalibration {
   int32_t max{kDefaultAxisMax};
 
   /// Returns true when calibration endpoints are strictly increasing.
-  constexpr bool is_valid() const noexcept {
-    return (min < center) && (center < max);
-  }
+  constexpr bool is_valid() const noexcept { return (min < center) && (center < max); }
 };
 
 // Fast response curve family (explicit numeric IDs for serialization compatibility).
@@ -56,12 +54,9 @@ struct AxisConfig {
   bool enabled{false};
 };
 
-static_assert(std::is_trivially_copyable_v<AxisCalibration>,
-              "AxisCalibration must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<AxisCurve>,
-              "AxisCurve must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<AxisConfig>,
-              "AxisConfig must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<AxisCalibration>, "AxisCalibration must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<AxisCurve>, "AxisCurve must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<AxisConfig>, "AxisConfig must be trivially copyable");
 
 /// Normalizes a raw ADC sample using `calibration` into [-1.0f, +1.0f].
 /// Returns +0.0f when calibration bounds are invalid.

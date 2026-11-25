@@ -19,9 +19,7 @@ uint8_t sanitize_hat(uint8_t hat) noexcept {
   return (hat <= kMaxValidHat) ? hat : kHatCentered;
 }
 
-int16_t resolve_axis(const StickState& left,
-                     const StickState& right,
-                     AxisSource src) noexcept {
+int16_t resolve_axis(const StickState& left, const StickState& right, AxisSource src) noexcept {
   if (src.src_axis >= kMaxAxes) {
     return kAxisCenter;
   }
@@ -35,9 +33,7 @@ int16_t resolve_axis(const StickState& left,
   }
 }
 
-bool resolve_button(const StickState& left,
-                    const StickState& right,
-                    ButtonSource src) noexcept {
+bool resolve_button(const StickState& left, const StickState& right, ButtonSource src) noexcept {
   if (src.src_button >= kMaxCombineButtons) {
     return false;
   }
@@ -51,9 +47,7 @@ bool resolve_button(const StickState& left,
   }
 }
 
-uint8_t merge_hats(uint8_t left_hat,
-                   uint8_t right_hat,
-                   HatMergePolicy policy) noexcept {
+uint8_t merge_hats(uint8_t left_hat, uint8_t right_hat, HatMergePolicy policy) noexcept {
   const uint8_t l = sanitize_hat(left_hat);
   const uint8_t r = sanitize_hat(right_hat);
   switch (policy) {
@@ -72,9 +66,7 @@ uint8_t merge_hats(uint8_t left_hat,
 
 }  // namespace
 
-StickState combine_sticks(const StickState& left,
-                          const StickState& right,
-                          const StickCombineConfig& config) noexcept {
+StickState combine_sticks(const StickState& left, const StickState& right, const StickCombineConfig& config) noexcept {
   StickState out = make_centered_state(kStateFlagNone);
 
   for (uint8_t i = 0; i < kMaxAxes; ++i) {
@@ -92,12 +84,10 @@ StickState combine_sticks(const StickState& left,
   out.hat = merge_hats(left.hat, right.hat, config.hat_policy);
 
   uint8_t flags = kStateFlagNone;
-  if (((left.flags & kStateFlagConnected) != 0U) ||
-      ((right.flags & kStateFlagConnected) != 0U)) {
+  if (((left.flags & kStateFlagConnected) != 0U) || ((right.flags & kStateFlagConnected) != 0U)) {
     flags = static_cast<uint8_t>(flags | kStateFlagConnected);
   }
-  if (((left.flags & kStateFlagFailsafe) != 0U) ||
-      ((right.flags & kStateFlagFailsafe) != 0U)) {
+  if (((left.flags & kStateFlagFailsafe) != 0U) || ((right.flags & kStateFlagFailsafe) != 0U)) {
     flags = static_cast<uint8_t>(flags | kStateFlagFailsafe);
   }
   out.flags = flags;

@@ -41,8 +41,7 @@ static_assert(tandem::board::kHasEspNow, "base_station requires ESP-NOW support"
 namespace {
 
 constexpr uint8_t kEspNowChannel = static_cast<uint8_t>(TANDEM_ESPNOW_CHANNEL);
-constexpr uint32_t kFailsafeTimeoutMs =
-    static_cast<uint32_t>(TANDEM_FAILSAFE_TIMEOUT_MS);
+constexpr uint32_t kFailsafeTimeoutMs = static_cast<uint32_t>(TANDEM_FAILSAFE_TIMEOUT_MS);
 constexpr uint32_t kUsbPollIntervalUs = 1000;  // 1000 Hz USB HID target
 constexpr uint32_t kStatusIntervalMs = 2000;
 constexpr uint32_t kLiveStreamIntervalMs = 33;
@@ -62,26 +61,20 @@ RxStickSnapshot g_rx_snapshots[2]{};
 tandem::EspNowLinkStats g_link_stats[2]{};
 std::atomic<uint32_t> g_decode_errors{0};
 
-void on_espnow_recv(const esp_now_recv_info_t* esp_now_info,
-                    const uint8_t* data,
-                    int data_len) {
+void on_espnow_recv(const esp_now_recv_info_t* esp_now_info, const uint8_t* data, int data_len) {
   if (data == nullptr || data_len <= 0) {
     g_decode_errors.fetch_add(1, std::memory_order_relaxed);
     return;
   }
 
   tandem::DecodedEspNowPacket decoded{};
-  if (tandem::decode_espnow_packet(
-          data, static_cast<size_t>(data_len), decoded) !=
-      tandem::PacketDecodeResult::Ok) {
+  if (tandem::decode_espnow_packet(data, static_cast<size_t>(data_len), decoded) != tandem::PacketDecodeResult::Ok) {
     g_decode_errors.fetch_add(1, std::memory_order_relaxed);
     return;
   }
 
   const size_t idx = (decoded.stick_id == tandem::StickId::Left) ? 0U : 1U;
-  const int8_t rssi = (esp_now_info != nullptr && esp_now_info->rx_ctrl != nullptr)
-                          ? static_cast<int8_t>(esp_now_info->rx_ctrl->rssi)
-                          : 0;
+  const int8_t rssi = (esp_now_info != nullptr && esp_now_info->rx_ctrl != nullptr) ? static_cast<int8_t>(esp_now_info->rx_ctrl->rssi) : 0;
 
   portENTER_CRITICAL(&g_rx_mux);
   g_rx_snapshots[idx].state = decoded.state;
@@ -129,10 +122,7 @@ const char* link_status_str(tandem::LinkStatus status) noexcept {
 }
 
 tandem::config::TelemetrySnapshot build_base_telemetry() noexcept {
-  std::snprintf(g_peer_status_buf,
-                sizeof(g_peer_status_buf),
-                "L:%s R:%s",
-                link_status_str(g_monitors[0].status()),
+  std::snprintf(g_peer_status_buf, sizeof(g_peer_status_buf), "L:%s R:%s", link_status_str(g_monitors[0].status()),
                 link_status_str(g_monitors[1].status()));
 
   tandem::EspNowLinkStats stats_copy[2]{};
@@ -147,17 +137,13 @@ tandem::config::TelemetrySnapshot build_base_telemetry() noexcept {
   tlm.has_tx_hz = true;
   tlm.tx_hz = g_measured_tx_hz;
   tlm.has_dropped = true;
-  tlm.dropped_packets = stats_copy[0].dropped_packets +
-                        stats_copy[1].dropped_packets +
-                        g_decode_errors.load(std::memory_order_relaxed);
+  tlm.dropped_packets = stats_copy[0].dropped_packets + stats_copy[1].dropped_packets + g_decode_errors.load(std::memory_order_relaxed);
 
   const bool left_conn = g_monitors[0].is_connected();
   const bool right_conn = g_monitors[1].is_connected();
   tlm.has_failsafe = true;
-  tlm.failsafe_active =
-      (!left_conn && !right_conn) ||
-      (g_monitors[0].status() == tandem::LinkStatus::TimedOut) ||
-      (g_monitors[1].status() == tandem::LinkStatus::TimedOut);
+  tlm.failsafe_active = (!left_conn && !right_conn) || (g_monitors[0].status() == tandem::LinkStatus::TimedOut) ||
+                        (g_monitors[1].status() == tandem::LinkStatus::TimedOut);
 
   if (left_conn || right_conn) {
     tlm.has_rssi = true;
@@ -175,16 +161,13 @@ tandem::config::DeviceCapabilities build_base_capabilities() noexcept {
   caps.stick_id = tandem::StickId::Unknown;
   caps.is_base_station = true;
   caps.has_config = false;
-  caps.transport_mode =
-      tandem::base_usb::kCombinedMode ? "ESPNOW_RX_COMBINED" : "ESPNOW_RX_DUAL";
+  caps.transport_mode = tandem::base_usb::kCombinedMode ? "ESPNOW_RX_COMBINED" : "ESPNOW_RX_DUAL";
   caps.synthetic = false;
   caps.axes_mask = 0xFFU;
   caps.buttons_mask = 0xFFFFFFFFUL;
   caps.has_hat = true;
   caps.adc_max = tandem::kDefaultAxisMax;
-  caps.transports_mask = tandem::config::kTransportMaskEspNowRx |
-                         tandem::config::kTransportMaskUsbHid |
-                         tandem::config::kTransportMaskUsbSerial |
+  caps.transports_mask = tandem::config::kTransportMaskEspNowRx | tandem::config::kTransportMaskUsbHid | tandem::config::kTransportMaskUsbSerial |
                          tandem::config::kTransportMaskWebHid;
   caps.fw_version = tandem::core_version();
   caps.git_commit = tandem::core_git_commit();
@@ -192,9 +175,7 @@ tandem::config::DeviceCapabilities build_base_capabilities() noexcept {
   return caps;
 }
 
-void handle_config_line(const char* line,
-                        bool via_webhid = false,
-                        uint8_t seq = 0) noexcept {
+void handle_config_line(const char* line, bool via_webhid = false, uint8_t seq = 0) noexcept {
   struct CallbackContext {
     bool via_webhid;
   } cb_ctx{via_webhid};
@@ -202,8 +183,7 @@ void handle_config_line(const char* line,
   tandem::config::ConfigCallbacks cbs{};
   cbs.ctx = &cb_ctx;
   cbs.on_live_changed = [](void* ctx, bool enabled) {
-    const bool from_webhid =
-        (ctx != nullptr) && static_cast<const CallbackContext*>(ctx)->via_webhid;
+    const bool from_webhid = (ctx != nullptr) && static_cast<const CallbackContext*>(ctx)->via_webhid;
     if (from_webhid) {
       g_live_webhid = enabled;
     } else {
@@ -217,8 +197,7 @@ void handle_config_line(const char* line,
   };
   char resp[tandem::config::kMaxResponseLength]{};
   tandem::StickInputConfig unused_cfg{};
-  const size_t n = tandem::config::process_command(
-      line, build_base_capabilities(), unused_cfg, cbs, resp, sizeof(resp));
+  const size_t n = tandem::config::process_command(line, build_base_capabilities(), unused_cfg, cbs, resp, sizeof(resp));
   if (n > 0) {
     if (via_webhid) {
       tandem::base_usb::send_config_response(seq, resp, n);
@@ -254,8 +233,7 @@ void poll_serial_config() noexcept {
       } else {
         g_cmd_reading_line = false;
         g_cmd_len = 0;
-        Serial.printf("%s{\"v\":%u,\"cmd\":\"unknown\",\"ok\":false,\"err\":\"line_too_long\"}\n",
-                      tandem::config::kResponsePrefix,
+        Serial.printf("%s{\"v\":%u,\"cmd\":\"unknown\",\"ok\":false,\"err\":\"line_too_long\"}\n", tandem::config::kResponsePrefix,
                       static_cast<unsigned>(tandem::config::kProtocolVersion));
       }
       continue;
@@ -299,19 +277,12 @@ void setup() {
   Serial.println();
   Serial.println("=== T.A.N.D.E.M. ESP-NOW USB Base Station (Mode B) ===");
   Serial.printf("Board      : %s\n", tandem::board::kBoardName);
-  Serial.printf("Base MAC   : %02X:%02X:%02X:%02X:%02X:%02X (ch=%u)\n",
-                local_mac[0], local_mac[1], local_mac[2],
-                local_mac[3], local_mac[4], local_mac[5],
-                static_cast<unsigned>(kEspNowChannel));
-  Serial.printf("ESP-NOW    : %s (failsafe=%lu ms)\n",
-                espnow_ok ? "READY" : "INIT FAILED",
-                static_cast<unsigned long>(kFailsafeTimeoutMs));
-  Serial.printf("USB HID    : %s (VID=0x%04X PID=0x%04X, %s, %u-byte desc)\n",
-                tandem::base_usb::kHidInterfaceName,
-                static_cast<unsigned>(tandem::base_usb::kUsbVid),
-                static_cast<unsigned>(tandem::base_usb::kUsbPid),
-                tandem::base_usb::kCombinedMode ? "Combined 1x" : "Dual 2x",
-                static_cast<unsigned>(tandem::base_usb::kReportDescriptorBytes));
+  Serial.printf("Base MAC   : %02X:%02X:%02X:%02X:%02X:%02X (ch=%u)\n", local_mac[0], local_mac[1], local_mac[2], local_mac[3], local_mac[4],
+                local_mac[5], static_cast<unsigned>(kEspNowChannel));
+  Serial.printf("ESP-NOW    : %s (failsafe=%lu ms)\n", espnow_ok ? "READY" : "INIT FAILED", static_cast<unsigned long>(kFailsafeTimeoutMs));
+  Serial.printf("USB HID    : %s (VID=0x%04X PID=0x%04X, %s, %u-byte desc)\n", tandem::base_usb::kHidInterfaceName,
+                static_cast<unsigned>(tandem::base_usb::kUsbVid), static_cast<unsigned>(tandem::base_usb::kUsbPid),
+                tandem::base_usb::kCombinedMode ? "Combined 1x" : "Dual 2x", static_cast<unsigned>(tandem::base_usb::kReportDescriptorBytes));
 
   const uint32_t now_ms = millis();
   g_last_usb_us = micros();
@@ -323,9 +294,7 @@ void setup() {
 void loop() {
   const uint32_t now_ms = millis();
   poll_serial_config();
-  tandem::base_usb::drain_config_commands([](const char* hid_cmd, uint8_t hid_seq) {
-    handle_config_line(hid_cmd, true, hid_seq);
-  });
+  tandem::base_usb::drain_config_commands([](const char* hid_cmd, uint8_t hid_seq) { handle_config_line(hid_cmd, true, hid_seq); });
   const uint32_t now_us = micros();
 
   if (static_cast<uint32_t>(now_us - g_last_usb_us) >= kUsbPollIntervalUs) {
@@ -358,8 +327,7 @@ void loop() {
     }
 
     if constexpr (tandem::base_usb::kCombinedMode) {
-      const tandem::StickState combined = tandem::combine_sticks(
-          g_monitors[0].state(), g_monitors[1].state(), g_combine_config);
+      const tandem::StickState combined = tandem::combine_sticks(g_monitors[0].state(), g_monitors[1].state(), g_combine_config);
       if (tandem::base_usb::send_joystick(tandem::base_usb::kReportIdLeft, combined)) {
         ++g_usb_sent;
         ++g_tx_report_count;
@@ -367,10 +335,8 @@ void loop() {
         ++g_usb_dropped;
       }
     } else {
-      const uint8_t report_ids[2] = {
-          tandem::base_usb::kReportIdLeft, tandem::base_usb::kReportIdRight};
-      if (tandem::base_usb::send_joystick(
-              report_ids[g_next_dual_idx], g_monitors[g_next_dual_idx].state())) {
+      const uint8_t report_ids[2] = {tandem::base_usb::kReportIdLeft, tandem::base_usb::kReportIdRight};
+      if (tandem::base_usb::send_joystick(report_ids[g_next_dual_idx], g_monitors[g_next_dual_idx].state())) {
         ++g_usb_sent;
         ++g_tx_report_count;
         g_next_dual_idx ^= 1U;
@@ -382,19 +348,15 @@ void loop() {
 
   const uint32_t rate_elapsed_ms = static_cast<uint32_t>(now_ms - g_rate_window_ms);
   if (rate_elapsed_ms >= 1000U) {
-    g_measured_rx_hz = static_cast<uint16_t>(
-        (g_rx_pkt_count * 1000UL) / rate_elapsed_ms);
-    g_measured_tx_hz = static_cast<uint16_t>(
-        (g_tx_report_count * 1000UL) / rate_elapsed_ms);
+    g_measured_rx_hz = static_cast<uint16_t>((g_rx_pkt_count * 1000UL) / rate_elapsed_ms);
+    g_measured_tx_hz = static_cast<uint16_t>((g_tx_report_count * 1000UL) / rate_elapsed_ms);
     g_rx_pkt_count = 0;
     g_tx_report_count = 0;
     g_rate_window_ms = now_ms;
   }
 
-  const bool any_connected =
-      g_monitors[0].is_connected() || g_monitors[1].is_connected();
-  const uint32_t led_interval =
-      any_connected ? kLedConnectedIntervalMs : kLedIdleIntervalMs;
+  const bool any_connected = g_monitors[0].is_connected() || g_monitors[1].is_connected();
+  const uint32_t led_interval = any_connected ? kLedConnectedIntervalMs : kLedIdleIntervalMs;
   if constexpr (tandem::board::kPinStatusLed >= 0) {
     if (static_cast<uint32_t>(now_ms - g_last_led_ms) >= led_interval) {
       g_last_led_ms = now_ms;
@@ -409,14 +371,10 @@ void loop() {
       const tandem::RawStickInput raw_zero{};
       const tandem::StickState active_state =
           tandem::base_usb::kCombinedMode
-              ? tandem::combine_sticks(
-                    g_monitors[0].state(), g_monitors[1].state(), g_combine_config)
-              : ((g_monitors[0].is_connected() || !g_monitors[1].is_connected())
-                     ? g_monitors[0].state()
-                     : g_monitors[1].state());
+              ? tandem::combine_sticks(g_monitors[0].state(), g_monitors[1].state(), g_combine_config)
+              : ((g_monitors[0].is_connected() || !g_monitors[1].is_connected()) ? g_monitors[0].state() : g_monitors[1].state());
       char resp[tandem::config::kMaxResponseLength]{};
-      const size_t n = tandem::config::format_live_response(
-          raw_zero, active_state, false, build_base_telemetry(), resp, sizeof(resp));
+      const size_t n = tandem::config::format_live_response(raw_zero, active_state, false, build_base_telemetry(), resp, sizeof(resp));
       if (n > 0) {
         if (g_live_serial) {
           Serial.print(resp);
@@ -435,24 +393,14 @@ void loop() {
     stats_copy[1] = g_link_stats[1];
     portEXIT_CRITICAL(&g_rx_mux);
 
-    Serial.printf(
-        "[%lu ms] L:%s(rx=%lu drop=%lu ooo=%lu rssi=%d x=%d) R:%s(rx=%lu drop=%lu ooo=%lu rssi=%d x=%d) | err=%lu usb=%lu/%lu\n",
-        static_cast<unsigned long>(now_ms),
-        link_status_str(g_monitors[0].status()),
-        static_cast<unsigned long>(stats_copy[0].rx_packets),
-        static_cast<unsigned long>(stats_copy[0].dropped_packets),
-        static_cast<unsigned long>(stats_copy[0].out_of_order_or_dup),
-        static_cast<int>(g_last_rssi[0]),
-        static_cast<int>(g_monitors[0].state().axes[0]),
-        link_status_str(g_monitors[1].status()),
-        static_cast<unsigned long>(stats_copy[1].rx_packets),
-        static_cast<unsigned long>(stats_copy[1].dropped_packets),
-        static_cast<unsigned long>(stats_copy[1].out_of_order_or_dup),
-        static_cast<int>(g_last_rssi[1]),
-        static_cast<int>(g_monitors[1].state().axes[0]),
-        static_cast<unsigned long>(g_decode_errors.load(std::memory_order_relaxed)),
-        static_cast<unsigned long>(g_usb_sent),
-        static_cast<unsigned long>(g_usb_dropped));
+    Serial.printf("[%lu ms] L:%s(rx=%lu drop=%lu ooo=%lu rssi=%d x=%d) R:%s(rx=%lu drop=%lu ooo=%lu rssi=%d x=%d) | err=%lu usb=%lu/%lu\n",
+                  static_cast<unsigned long>(now_ms), link_status_str(g_monitors[0].status()), static_cast<unsigned long>(stats_copy[0].rx_packets),
+                  static_cast<unsigned long>(stats_copy[0].dropped_packets), static_cast<unsigned long>(stats_copy[0].out_of_order_or_dup),
+                  static_cast<int>(g_last_rssi[0]), static_cast<int>(g_monitors[0].state().axes[0]), link_status_str(g_monitors[1].status()),
+                  static_cast<unsigned long>(stats_copy[1].rx_packets), static_cast<unsigned long>(stats_copy[1].dropped_packets),
+                  static_cast<unsigned long>(stats_copy[1].out_of_order_or_dup), static_cast<int>(g_last_rssi[1]),
+                  static_cast<int>(g_monitors[1].state().axes[0]), static_cast<unsigned long>(g_decode_errors.load(std::memory_order_relaxed)),
+                  static_cast<unsigned long>(g_usb_sent), static_cast<unsigned long>(g_usb_dropped));
   }
 
   bool webhid_stalled = false;

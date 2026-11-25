@@ -1,0 +1,15 @@
+# Derived from the Google C++ Style Guide:
+#   https://google.github.io/styleguide/cppguide.html
+#   https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+#
+# Only explicit deviations from `BasedOnStyle: Google` are listed below.
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++17
+ColumnLimit: 150
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+ReflowComments: false
+...

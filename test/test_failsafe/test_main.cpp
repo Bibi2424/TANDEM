@@ -1,5 +1,6 @@
-#include <cstdint>
 #include <unity.h>
+
+#include <cstdint>
 
 #include "tandem/failsafe.h"
 
@@ -11,8 +12,7 @@ void tearDown() {}
 void test_boot_fail_closed_at_t0() {
   tandem::FailsafeMonitor monitor;
 
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected), static_cast<uint8_t>(monitor.status()));
   TEST_ASSERT_FALSE(monitor.is_connected());
   TEST_ASSERT_TRUE(monitor.is_failsafe());
   TEST_ASSERT_FALSE(monitor.has_received_packet());
@@ -23,8 +23,7 @@ void test_boot_fail_closed_at_t0() {
   }
 
   monitor.update(0U);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected), static_cast<uint8_t>(monitor.status()));
   TEST_ASSERT_TRUE(monitor.is_failsafe());
 }
 
@@ -55,8 +54,7 @@ void test_exact_timeout_boundary() {
 
   // Exact timeout: transitions to TimedOut with failsafe state.
   monitor.update(1200U);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut), static_cast<uint8_t>(monitor.status()));
   TEST_ASSERT_FALSE(monitor.is_connected());
   TEST_ASSERT_TRUE(monitor.is_failsafe());
   TEST_ASSERT_EQUAL_INT16(tandem::kAxisCenter, monitor.state().axes[0]);
@@ -85,8 +83,7 @@ void test_uint32_wraparound_no_false_timeout_and_exact_expiry() {
   TEST_ASSERT_EQUAL_INT16(20000, monitor.state().axes[0]);
 
   monitor.update(149U);  // +200 ms elapsed across wraparound
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut), static_cast<uint8_t>(monitor.status()));
   TEST_ASSERT_TRUE(monitor.is_failsafe());
   TEST_ASSERT_EQUAL_INT16(tandem::kAxisCenter, monitor.state().axes[0]);
 }
@@ -101,15 +98,13 @@ void test_latched_anti_resurrection_on_full_wraparound() {
 
   monitor.on_packet(active, 1000U);
   monitor.update(1200U);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut), static_cast<uint8_t>(monitor.status()));
 
   // Simulated 49.7-day wraparound back into [1000, 1199] must NOT resurrect Connected.
   monitor.update(1000U);
   monitor.update(1050U);
   monitor.update(1199U);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut), static_cast<uint8_t>(monitor.status()));
   TEST_ASSERT_FALSE(monitor.is_connected());
   TEST_ASSERT_EQUAL_INT16(tandem::kAxisCenter, monitor.state().axes[0]);
 }
@@ -136,8 +131,7 @@ void test_trigger_failsafe_and_reset() {
 
   // Before any packet: trigger_failsafe keeps Disconnected.
   monitor.trigger_failsafe();
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected), static_cast<uint8_t>(monitor.status()));
 
   tandem::StickState active = tandem::make_centered_state();
   active.axes[2] = 9999;
@@ -145,14 +139,12 @@ void test_trigger_failsafe_and_reset() {
   TEST_ASSERT_TRUE(monitor.is_connected());
 
   monitor.trigger_failsafe();
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::TimedOut), static_cast<uint8_t>(monitor.status()));
   TEST_ASSERT_TRUE(monitor.is_failsafe());
   TEST_ASSERT_EQUAL_INT16(tandem::kAxisCenter, monitor.state().axes[2]);
 
   monitor.reset();
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected),
-                          static_cast<uint8_t>(monitor.status()));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::LinkStatus::Disconnected), static_cast<uint8_t>(monitor.status()));
   TEST_ASSERT_FALSE(monitor.has_received_packet());
   TEST_ASSERT_EQUAL_UINT32(0U, monitor.last_packet_ms());
   TEST_ASSERT_TRUE(monitor.is_failsafe());

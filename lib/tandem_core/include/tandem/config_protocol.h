@@ -58,8 +58,7 @@ struct TelemetrySnapshot {
   const char* peer_status{nullptr};
 
   constexpr bool has_any() const noexcept {
-    return has_sample_hz || has_tx_hz || has_rssi || has_dropped ||
-           has_failsafe || has_battery_mv || has_battery_pct ||
+    return has_sample_hz || has_tx_hz || has_rssi || has_dropped || has_failsafe || has_battery_mv || has_battery_pct ||
            (has_peer_status && peer_status != nullptr && peer_status[0] != '\0');
   }
 };
@@ -73,44 +72,25 @@ struct ConfigCallbacks {
 };
 
 /// Formats a `caps` response line (`@TANDEM {...}\n`). Returns bytes written, or 0 on overflow.
-size_t format_caps_response(const DeviceCapabilities& caps,
-                            char* out,
-                            size_t out_size) noexcept;
+size_t format_caps_response(const DeviceCapabilities& caps, char* out, size_t out_size) noexcept;
 
 /// Formats a `status` response line (`@TANDEM {...}\n`). Returns bytes written, or 0 on overflow.
-size_t format_status_response(const DeviceCapabilities& caps,
-                              const TelemetrySnapshot& tlm,
-                              char* out,
-                              size_t out_size) noexcept;
+size_t format_status_response(const DeviceCapabilities& caps, const TelemetrySnapshot& tlm, char* out, size_t out_size) noexcept;
 
 /// Formats a `get` response line (`@TANDEM {...}\n`). Returns bytes written, or 0 on overflow.
-size_t format_get_response(const StickInputConfig& cfg,
-                           char* out,
-                           size_t out_size) noexcept;
+size_t format_get_response(const StickInputConfig& cfg, char* out, size_t out_size) noexcept;
 
 /// Formats a `live` sample frame (`@TANDEM {...}\n`) without optional telemetry.
-size_t format_live_response(const RawStickInput& raw,
-                            const StickState& state,
-                            bool synthetic,
-                            char* out,
-                            size_t out_size) noexcept;
+size_t format_live_response(const RawStickInput& raw, const StickState& state, bool synthetic, char* out, size_t out_size) noexcept;
 
 /// Formats a `live` sample frame (`@TANDEM {...}\n`) with optional telemetry.
 /// Returns bytes written, or 0 on overflow.
-size_t format_live_response(const RawStickInput& raw,
-                            const StickState& state,
-                            bool synthetic,
-                            const TelemetrySnapshot& tlm,
-                            char* out,
+size_t format_live_response(const RawStickInput& raw, const StickState& state, bool synthetic, const TelemetrySnapshot& tlm, char* out,
                             size_t out_size) noexcept;
 
 /// Parses and executes a config command line (with or without leading `$TANDEM ` prefix).
 /// Writes the `@TANDEM {...}\n` response into `out`. Returns bytes written, or 0 on overflow.
-size_t process_command(const char* line,
-                       const DeviceCapabilities& caps,
-                       StickInputConfig& cfg,
-                       const ConfigCallbacks& callbacks,
-                       char* out,
+size_t process_command(const char* line, const DeviceCapabilities& caps, StickInputConfig& cfg, const ConfigCallbacks& callbacks, char* out,
                        size_t out_size) noexcept;
 
 }  // namespace tandem::config

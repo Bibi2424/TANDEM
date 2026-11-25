@@ -1,5 +1,6 @@
-#include <cstdint>
 #include <unity.h>
+
+#include <cstdint>
 
 #include "tandem/input_pipeline.h"
 
@@ -34,15 +35,13 @@ void test_custom_flags_and_zeroed_reserved() {
   const tandem::RawStickInput raw{};
   const tandem::StickInputConfig config{};
 
-  const tandem::StickState none_state =
-      tandem::process_stick_input(raw, config, tandem::kStateFlagNone);
+  const tandem::StickState none_state = tandem::process_stick_input(raw, config, tandem::kStateFlagNone);
   TEST_ASSERT_EQUAL_UINT8(tandem::kStateFlagNone, none_state.flags);
   TEST_ASSERT_EQUAL_UINT8(0U, none_state.reserved[0]);
   TEST_ASSERT_EQUAL_UINT8(0U, none_state.reserved[1]);
 
   const uint8_t custom_flags = tandem::kStateFlagConnected | tandem::kStateFlagFailsafe;
-  const tandem::StickState combined_state =
-      tandem::process_stick_input(raw, config, custom_flags);
+  const tandem::StickState combined_state = tandem::process_stick_input(raw, config, custom_flags);
   TEST_ASSERT_EQUAL_UINT8(custom_flags, combined_state.flags);
   TEST_ASSERT_EQUAL_UINT8(0U, combined_state.reserved[0]);
   TEST_ASSERT_EQUAL_UINT8(0U, combined_state.reserved[1]);
