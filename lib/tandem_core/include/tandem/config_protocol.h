@@ -20,6 +20,7 @@ inline constexpr uint8_t kTransportMaskEspNowTx = 1u << 2;
 inline constexpr uint8_t kTransportMaskBleConfig = 1u << 3;
 inline constexpr uint8_t kTransportMaskEspNowRx = 1u << 4;
 inline constexpr uint8_t kTransportMaskUsbSerial = 1u << 5;
+inline constexpr uint8_t kTransportMaskWebHid = 1u << 6;
 
 struct DeviceCapabilities {
   const char* board{"UNKNOWN"};

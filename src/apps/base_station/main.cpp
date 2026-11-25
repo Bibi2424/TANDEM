@@ -1,7 +1,5 @@
 #include <Arduino.h>
-#include <USB.h>
 #include <WiFi.h>
-#include <esp_mac.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 
@@ -19,25 +17,18 @@ USBCDC g_usb_serial;
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 
 #include "boards/board_config.h"
-#include "esp32-hal-tinyusb.h"
 #include "tandem/config_protocol.h"
 #include "tandem/core_info.h"
-#include "tandem/device_name.h"
 #include "tandem/espnow_packet.h"
 #include "tandem/failsafe.h"
-#include "tandem/hid_report.h"
 #include "tandem/stick_combiner.h"
 #include "tandem/types.h"
+#include "usb_hid_bridge.h"
 
 static_assert(tandem::board::kHasNativeUsb, "base_station requires native USB support");
 static_assert(tandem::board::kHasEspNow, "base_station requires ESP-NOW support");
-
-static_assert(tandem::kHidJoystickReportDescriptor[6] == 0x85U &&
-                  tandem::kHidJoystickReportDescriptor[7] == tandem::kHidReportIdJoystick,
-              "Expected Report ID byte at offset 7 in canonical HID descriptor");
 
 #ifndef TANDEM_ESPNOW_CHANNEL
 #define TANDEM_ESPNOW_CHANNEL 1
@@ -47,13 +38,8 @@ static_assert(tandem::kHidJoystickReportDescriptor[6] == 0x85U &&
 #define TANDEM_FAILSAFE_TIMEOUT_MS 200
 #endif
 
-#ifndef TANDEM_BASE_COMBINED_MODE
-#define TANDEM_BASE_COMBINED_MODE 0
-#endif
-
 namespace {
 
-constexpr bool kCombinedMode = (TANDEM_BASE_COMBINED_MODE != 0);
 constexpr uint8_t kEspNowChannel = static_cast<uint8_t>(TANDEM_ESPNOW_CHANNEL);
 constexpr uint32_t kFailsafeTimeoutMs =
     static_cast<uint32_t>(TANDEM_FAILSAFE_TIMEOUT_MS);
@@ -63,41 +49,6 @@ constexpr uint32_t kLiveStreamIntervalMs = 33;
 constexpr uint32_t kLedConnectedIntervalMs = 250;
 constexpr uint32_t kLedIdleIntervalMs = 1000;
 constexpr uint32_t kUsbSerialWaitMs = 1500;
-
-constexpr uint16_t kUsbVid = 0x303AU;
-constexpr uint16_t kUsbPid = kCombinedMode ? 0x80C5U : 0x80C4U;
-constexpr const char* kHidInterfaceName =
-    kCombinedMode ? "TANDEM Combined Stick" : "TANDEM Base Station";
-
-constexpr uint8_t kReportIdLeft = 1;
-constexpr uint8_t kReportIdRight = 2;
-constexpr size_t kReportDescriptorBytes =
-    kCombinedMode ? tandem::kHidJoystickReportDescriptorBytes
-                  : (tandem::kHidJoystickReportDescriptorBytes * 2U);
-
-uint8_t g_report_descriptor[kReportDescriptorBytes]{};
-
-void init_report_descriptor() noexcept {
-  std::memcpy(g_report_descriptor,
-              tandem::kHidJoystickReportDescriptor,
-              tandem::kHidJoystickReportDescriptorBytes);
-  g_report_descriptor[7] = kReportIdLeft;
-  if constexpr (!kCombinedMode) {
-    std::memcpy(&g_report_descriptor[tandem::kHidJoystickReportDescriptorBytes],
-                tandem::kHidJoystickReportDescriptor,
-                tandem::kHidJoystickReportDescriptorBytes);
-    g_report_descriptor[tandem::kHidJoystickReportDescriptorBytes + 7] =
-        kReportIdRight;
-  }
-}
-
-bool send_hid_report(uint8_t report_id, const tandem::StickState& state) noexcept {
-  if (!tud_hid_n_ready(0)) {
-    return false;
-  }
-  const tandem::HidJoystickReport report = tandem::encode_hid_joystick_report(state);
-  return tud_hid_n_report(0, report_id, report.bytes, static_cast<uint16_t>(sizeof(report.bytes)));
-}
 
 struct RxStickSnapshot {
   tandem::StickState state{tandem::make_centered_state(tandem::kStateFlagFailsafe)};
@@ -154,7 +105,8 @@ uint32_t g_tx_report_count = 0;
 uint16_t g_measured_rx_hz = 0;
 uint16_t g_measured_tx_hz = 0;
 bool g_led_state = false;
-bool g_live_streaming = false;
+bool g_live_serial = false;
+bool g_live_webhid = false;
 uint32_t g_usb_sent = 0;
 uint32_t g_usb_dropped = 0;
 [[maybe_unused]] size_t g_next_dual_idx = 0;
@@ -223,7 +175,8 @@ tandem::config::DeviceCapabilities build_base_capabilities() noexcept {
   caps.stick_id = tandem::StickId::Unknown;
   caps.is_base_station = true;
   caps.has_config = false;
-  caps.transport_mode = kCombinedMode ? "ESPNOW_RX_COMBINED" : "ESPNOW_RX_DUAL";
+  caps.transport_mode =
+      tandem::base_usb::kCombinedMode ? "ESPNOW_RX_COMBINED" : "ESPNOW_RX_DUAL";
   caps.synthetic = false;
   caps.axes_mask = 0xFFU;
   caps.buttons_mask = 0xFFFFFFFFUL;
@@ -231,17 +184,31 @@ tandem::config::DeviceCapabilities build_base_capabilities() noexcept {
   caps.adc_max = tandem::kDefaultAxisMax;
   caps.transports_mask = tandem::config::kTransportMaskEspNowRx |
                          tandem::config::kTransportMaskUsbHid |
-                         tandem::config::kTransportMaskUsbSerial;
+                         tandem::config::kTransportMaskUsbSerial |
+                         tandem::config::kTransportMaskWebHid;
   caps.fw_version = tandem::core_version();
   caps.git_commit = tandem::core_git_commit();
   caps.peer_status = tlm.peer_status;
   return caps;
 }
 
-void handle_serial_config_line(const char* line) noexcept {
+void handle_config_line(const char* line,
+                        bool via_webhid = false,
+                        uint8_t seq = 0) noexcept {
+  struct CallbackContext {
+    bool via_webhid;
+  } cb_ctx{via_webhid};
+
   tandem::config::ConfigCallbacks cbs{};
-  cbs.on_live_changed = [](void*, bool enabled) {
-    g_live_streaming = enabled;
+  cbs.ctx = &cb_ctx;
+  cbs.on_live_changed = [](void* ctx, bool enabled) {
+    const bool from_webhid =
+        (ctx != nullptr) && static_cast<const CallbackContext*>(ctx)->via_webhid;
+    if (from_webhid) {
+      g_live_webhid = enabled;
+    } else {
+      g_live_serial = enabled;
+    }
     g_last_live_ms = millis();
   };
   cbs.on_get_telemetry = [](void*, tandem::config::TelemetrySnapshot& out) -> bool {
@@ -253,7 +220,11 @@ void handle_serial_config_line(const char* line) noexcept {
   const size_t n = tandem::config::process_command(
       line, build_base_capabilities(), unused_cfg, cbs, resp, sizeof(resp));
   if (n > 0) {
-    Serial.print(resp);
+    if (via_webhid) {
+      tandem::base_usb::send_config_response(seq, resp, n);
+    } else {
+      Serial.print(resp);
+    }
   }
 }
 
@@ -269,67 +240,34 @@ bool setup_espnow_rx() {
   return esp_now_register_recv_cb(on_espnow_recv) == ESP_OK;
 }
 
-}  // namespace
+void poll_serial_config() noexcept {
+  while (Serial.available() > 0) {
+    const int ch = Serial.read();
+    if (g_cmd_reading_line) {
+      if (ch == '\r' || ch == '\n') {
+        g_cmd_buf[g_cmd_len] = '\0';
+        g_cmd_reading_line = false;
+        g_cmd_len = 0;
+        handle_config_line(g_cmd_buf, false);
+      } else if (g_cmd_len + 1 < sizeof(g_cmd_buf)) {
+        g_cmd_buf[g_cmd_len++] = static_cast<char>(ch);
+      } else {
+        g_cmd_reading_line = false;
+        g_cmd_len = 0;
+        Serial.printf("%s{\"v\":%u,\"cmd\":\"unknown\",\"ok\":false,\"err\":\"line_too_long\"}\n",
+                      tandem::config::kResponsePrefix,
+                      static_cast<unsigned>(tandem::config::kProtocolVersion));
+      }
+      continue;
+    }
 
-extern "C" uint16_t tandem_hid_load_descriptor(uint8_t* dst, uint8_t* itf) {
-  static bool initialized = false;
-  if (initialized) {
-    return 0;
+    if (ch == '$') {
+      g_cmd_reading_line = true;
+      g_cmd_buf[0] = '$';
+      g_cmd_len = 1;
+    }
   }
-  initialized = true;
-
-  const uint8_t str_index = tinyusb_add_string_descriptor(kHidInterfaceName);
-  const uint8_t ep_in = tinyusb_get_free_in_endpoint();
-  const uint8_t ep_out = tinyusb_get_free_out_endpoint();
-  if (ep_in == 0 || ep_out == 0) {
-    return 0;
-  }
-
-  const uint8_t descriptor[TUD_HID_INOUT_DESC_LEN] = {
-      TUD_HID_INOUT_DESCRIPTOR(*itf,
-                               str_index,
-                               HID_ITF_PROTOCOL_NONE,
-                               static_cast<uint16_t>(kReportDescriptorBytes),
-                               ep_out,
-                               static_cast<uint8_t>(0x80U | ep_in),
-                               CFG_TUD_ENDPOINT_SIZE,
-                               1)};
-  *itf += 1;
-  std::memcpy(dst, descriptor, TUD_HID_INOUT_DESC_LEN);
-  return TUD_HID_INOUT_DESC_LEN;
 }
-
-extern "C" uint8_t const* tud_hid_descriptor_report_cb(uint8_t) {
-  return g_report_descriptor;
-}
-
-extern "C" uint16_t tud_hid_get_report_cb(uint8_t,
-                                          uint8_t,
-                                          hid_report_type_t,
-                                          uint8_t*,
-                                          uint16_t) {
-  return 0;
-}
-
-extern "C" void tud_hid_set_report_cb(uint8_t,
-                                      uint8_t,
-                                      hid_report_type_t,
-                                      uint8_t const*,
-                                      uint16_t) {}
-
-namespace {
-
-// Must register the TinyUSB HID interface before initArduino() starts USB CDC
-// when ARDUINO_USB_CDC_ON_BOOT=1.
-struct TandemHidRegistrar {
-  TandemHidRegistrar() {
-    init_report_descriptor();
-    tinyusb_enable_interface2(
-        USB_INTERFACE_HID, TUD_HID_INOUT_DESC_LEN, tandem_hid_load_descriptor, false);
-  }
-};
-
-TandemHidRegistrar g_hid_registrar;
 
 }  // namespace
 
@@ -345,18 +283,7 @@ void setup() {
   g_monitors[0].set_config(fs_cfg);
   g_monitors[1].set_config(fs_cfg);
 
-  static char product_name[32]{};
-  uint8_t base_mac[6]{};
-  if (esp_efuse_mac_get_default(base_mac) != ESP_OK) {
-    std::memset(base_mac, 0, sizeof(base_mac));
-  }
-  tandem::format_device_name(product_name, sizeof(product_name), "TANDEM-Base", base_mac);
-
-  USB.VID(kUsbVid);
-  USB.PID(kUsbPid);
-  USB.manufacturerName("T.A.N.D.E.M.");
-  USB.productName(product_name);
-  USB.begin();
+  tandem::base_usb::begin();
 
   const bool espnow_ok = setup_espnow_rx();
   uint8_t local_mac[6]{};
@@ -380,11 +307,11 @@ void setup() {
                 espnow_ok ? "READY" : "INIT FAILED",
                 static_cast<unsigned long>(kFailsafeTimeoutMs));
   Serial.printf("USB HID    : %s (VID=0x%04X PID=0x%04X, %s, %u-byte desc)\n",
-                kHidInterfaceName,
-                static_cast<unsigned>(kUsbVid),
-                static_cast<unsigned>(kUsbPid),
-                kCombinedMode ? "Combined 1x" : "Dual 2x",
-                static_cast<unsigned>(kReportDescriptorBytes));
+                tandem::base_usb::kHidInterfaceName,
+                static_cast<unsigned>(tandem::base_usb::kUsbVid),
+                static_cast<unsigned>(tandem::base_usb::kUsbPid),
+                tandem::base_usb::kCombinedMode ? "Combined 1x" : "Dual 2x",
+                static_cast<unsigned>(tandem::base_usb::kReportDescriptorBytes));
 
   const uint32_t now_ms = millis();
   g_last_usb_us = micros();
@@ -393,38 +320,12 @@ void setup() {
   g_rate_window_ms = now_ms;
 }
 
-void poll_serial_config() noexcept {
-  while (Serial.available() > 0) {
-    const int ch = Serial.read();
-    if (g_cmd_reading_line) {
-      if (ch == '\r' || ch == '\n') {
-        g_cmd_buf[g_cmd_len] = '\0';
-        g_cmd_reading_line = false;
-        g_cmd_len = 0;
-        handle_serial_config_line(g_cmd_buf);
-      } else if (g_cmd_len + 1 < sizeof(g_cmd_buf)) {
-        g_cmd_buf[g_cmd_len++] = static_cast<char>(ch);
-      } else {
-        g_cmd_reading_line = false;
-        g_cmd_len = 0;
-        Serial.printf("%s{\"v\":%u,\"cmd\":\"unknown\",\"ok\":false,\"err\":\"line_too_long\"}\n",
-                      tandem::config::kResponsePrefix,
-                      static_cast<unsigned>(tandem::config::kProtocolVersion));
-      }
-      continue;
-    }
-
-    if (ch == '$') {
-      g_cmd_reading_line = true;
-      g_cmd_buf[0] = '$';
-      g_cmd_len = 1;
-    }
-  }
-}
-
 void loop() {
   const uint32_t now_ms = millis();
   poll_serial_config();
+  tandem::base_usb::drain_config_commands([](const char* hid_cmd, uint8_t hid_seq) {
+    handle_config_line(hid_cmd, true, hid_seq);
+  });
   const uint32_t now_us = micros();
 
   if (static_cast<uint32_t>(now_us - g_last_usb_us) >= kUsbPollIntervalUs) {
@@ -456,19 +357,20 @@ void loop() {
       g_monitors[i].update(now_ms);
     }
 
-    if constexpr (kCombinedMode) {
+    if constexpr (tandem::base_usb::kCombinedMode) {
       const tandem::StickState combined = tandem::combine_sticks(
           g_monitors[0].state(), g_monitors[1].state(), g_combine_config);
-      if (send_hid_report(kReportIdLeft, combined)) {
+      if (tandem::base_usb::send_joystick(tandem::base_usb::kReportIdLeft, combined)) {
         ++g_usb_sent;
         ++g_tx_report_count;
       } else {
         ++g_usb_dropped;
       }
     } else {
-      const uint8_t report_ids[2] = {kReportIdLeft, kReportIdRight};
-      if (send_hid_report(report_ids[g_next_dual_idx],
-                          g_monitors[g_next_dual_idx].state())) {
+      const uint8_t report_ids[2] = {
+          tandem::base_usb::kReportIdLeft, tandem::base_usb::kReportIdRight};
+      if (tandem::base_usb::send_joystick(
+              report_ids[g_next_dual_idx], g_monitors[g_next_dual_idx].state())) {
         ++g_usb_sent;
         ++g_tx_report_count;
         g_next_dual_idx ^= 1U;
@@ -501,12 +403,12 @@ void loop() {
     }
   }
 
-  if (g_live_streaming) {
+  if (g_live_serial || g_live_webhid) {
     if (static_cast<uint32_t>(now_ms - g_last_live_ms) >= kLiveStreamIntervalMs) {
       g_last_live_ms = now_ms;
       const tandem::RawStickInput raw_zero{};
       const tandem::StickState active_state =
-          kCombinedMode
+          tandem::base_usb::kCombinedMode
               ? tandem::combine_sticks(
                     g_monitors[0].state(), g_monitors[1].state(), g_combine_config)
               : ((g_monitors[0].is_connected() || !g_monitors[1].is_connected())
@@ -516,7 +418,12 @@ void loop() {
       const size_t n = tandem::config::format_live_response(
           raw_zero, active_state, false, build_base_telemetry(), resp, sizeof(resp));
       if (n > 0) {
-        Serial.print(resp);
+        if (g_live_serial) {
+          Serial.print(resp);
+        }
+        if (g_live_webhid) {
+          tandem::base_usb::send_config_live(resp, n);
+        }
       }
     }
   } else if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {
@@ -546,5 +453,11 @@ void loop() {
         static_cast<unsigned long>(g_decode_errors.load(std::memory_order_relaxed)),
         static_cast<unsigned long>(g_usb_sent),
         static_cast<unsigned long>(g_usb_dropped));
+  }
+
+  bool webhid_stalled = false;
+  tandem::base_usb::poll_config_tx(now_ms, webhid_stalled);
+  if (webhid_stalled) {
+    g_live_webhid = false;
   }
 }

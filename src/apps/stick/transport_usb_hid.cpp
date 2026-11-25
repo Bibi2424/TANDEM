@@ -12,6 +12,16 @@
 
 namespace tandem::stick {
 
+namespace {
+
+bool send_usb_config_chunk(void* ctx, const uint8_t* data, size_t len) noexcept {
+  auto* hid = static_cast<USBHID*>(ctx);
+  return hid != nullptr && hid->ready() &&
+         hid->SendReport(tandem::config::kHidReportIdConfigUsb, data, len, 5U);
+}
+
+}  // namespace
+
 TandemUsbJoystick::TandemUsbJoystick() {
   static bool registered = false;
   if (!registered) {
@@ -41,6 +51,64 @@ uint16_t TandemUsbJoystick::_onGetDescriptor(uint8_t* buffer) {
   return static_cast<uint16_t>(tandem::kHidJoystickReportDescriptorBytes);
 }
 
+TandemUsbConfigHid::TandemUsbConfigHid() {
+  static bool registered = false;
+  if (!registered) {
+    registered = true;
+    USBHID::addDevice(
+        this, static_cast<uint16_t>(tandem::config::kHidConfigReportDescriptorBytes));
+  }
+}
+
+void TandemUsbConfigHid::begin() { hid_.begin(); }
+
+bool TandemUsbConfigHid::ready() const { return hid_.ready(); }
+
+uint16_t TandemUsbConfigHid::_onGetDescriptor(uint8_t* buffer) {
+  std::memcpy(buffer,
+              tandem::config::kHidConfigUsbReportDescriptor.bytes,
+              tandem::config::kHidConfigReportDescriptorBytes);
+  return static_cast<uint16_t>(tandem::config::kHidConfigReportDescriptorBytes);
+}
+
+void TandemUsbConfigHid::handle_rx_chunk(uint8_t report_id,
+                                         const uint8_t* buffer,
+                                         uint16_t len) noexcept {
+  if (report_id != tandem::config::kHidReportIdConfigUsb) {
+    return;
+  }
+  endpoint_.on_rx_chunk(buffer, len);
+}
+
+void TandemUsbConfigHid::_onOutput(uint8_t report_id,
+                                   const uint8_t* buffer,
+                                   uint16_t len) {
+  handle_rx_chunk(report_id, buffer, len);
+}
+
+void TandemUsbConfigHid::_onSetFeature(uint8_t report_id,
+                                       const uint8_t* buffer,
+                                       uint16_t len) {
+  // Arduino-ESP32 USBHID routes Control SET_REPORT with non-zero report_id to _onSetFeature.
+  handle_rx_chunk(report_id, buffer, len);
+}
+
+bool TandemUsbConfigHid::enqueue_response(uint8_t seq,
+                                          const char* data,
+                                          size_t len) noexcept {
+  return endpoint_.enqueue_response(seq, data, len);
+}
+
+bool TandemUsbConfigHid::enqueue_live(const char* data, size_t len) noexcept {
+  return endpoint_.enqueue_live(data, len);
+}
+
+bool TandemUsbConfigHid::poll_tx(uint32_t now_ms, bool& stalled_out) noexcept {
+  return endpoint_.poll_tx(now_ms, send_usb_config_chunk, &hid_, stalled_out);
+}
+
+void TandemUsbConfigHid::reset_tx() noexcept { endpoint_.reset_tx(); }
+
 void UsbHidTransport::configure_usb_identity() noexcept {
   static bool configured = false;
   if (configured) {
@@ -62,6 +130,7 @@ void UsbHidTransport::init_usb_stack() noexcept {
   if (!stack_initialized_) {
     configure_usb_identity();
     joystick_.begin();
+    config_hid_.begin();
     USB.begin();
     stack_initialized_ = true;
   }
@@ -114,6 +183,20 @@ void UsbHidTransport::format_stats(char* out, size_t out_len) const noexcept {
                 joystick_.ready() ? 1 : 0,
                 static_cast<unsigned long>(sent_),
                 static_cast<unsigned long>(dropped_));
+}
+
+bool UsbHidTransport::send_config_response(uint8_t seq,
+                                           const char* data,
+                                           size_t len) noexcept {
+  return config_hid_.enqueue_response(seq, data, len);
+}
+
+bool UsbHidTransport::send_config_live(const char* data, size_t len) noexcept {
+  return config_hid_.enqueue_live(data, len);
+}
+
+bool UsbHidTransport::poll_config_tx(uint32_t now_ms, bool& stalled_out) noexcept {
+  return config_hid_.poll_tx(now_ms, stalled_out);
 }
 
 }  // namespace tandem::stick

@@ -100,6 +100,13 @@ uint16_t g_measured_tx_hz = 0;
 bool g_led_state = false;
 bool g_live_serial = false;
 bool g_live_ble = false;
+bool g_live_webhid = false;
+
+enum class ConfigChannel : uint8_t {
+  Serial = 0,
+  Ble = 1,
+  WebHid = 2,
+};
 
 char g_cmd_buf[tandem::config::kMaxCommandLength]{};
 size_t g_cmd_len = 0;
@@ -147,15 +154,22 @@ StickTransport* transport_for_mode(StickTransportMode mode) noexcept {
 
 tandem::config::DeviceCapabilities build_capabilities() noexcept;
 
-void emit_serial_caps_if_streaming() noexcept {
-  if (!g_live_serial) {
+void emit_unsolicited_caps_if_streaming() noexcept {
+  if (!g_live_serial && !g_live_webhid) {
     return;
   }
   char resp[tandem::config::kMaxResponseLength]{};
   const size_t n = tandem::config::format_caps_response(
       build_capabilities(), resp, sizeof(resp));
   if (n > 0) {
-    Serial.print(resp);
+    if (g_live_serial) {
+      Serial.print(resp);
+    }
+#if TANDEM_CAP_NATIVE_USB
+    if (g_live_webhid) {
+      g_usb_transport.send_config_response(0U, resp, n);
+    }
+#endif
   }
 }
 
@@ -198,7 +212,7 @@ void switch_transport_mode(StickTransportMode target) noexcept {
       Serial.printf("[stick] mode -> %s (ok)\n",
                     tandem::stick::mode_name(g_mode));
     }
-    emit_serial_caps_if_streaming();
+    emit_unsolicited_caps_if_streaming();
   } else {
     Serial.printf("[stick] ERROR: failed to start mode %s\n",
                   tandem::stick::mode_name(g_mode));
@@ -233,7 +247,8 @@ tandem::config::DeviceCapabilities build_capabilities() noexcept {
 
   uint8_t transports_mask = tandem::config::kTransportMaskUsbSerial;
   if constexpr (tandem::board::kHasNativeUsb) {
-    transports_mask |= tandem::config::kTransportMaskUsbHid;
+    transports_mask |= tandem::config::kTransportMaskUsbHid |
+                       tandem::config::kTransportMaskWebHid;
   }
   if constexpr (tandem::board::kHasBle) {
     transports_mask |= tandem::config::kTransportMaskBleHid |
@@ -274,13 +289,26 @@ tandem::config::DeviceCapabilities build_capabilities() noexcept {
   return caps;
 }
 
-void handle_config_line(const char* line, bool via_ble = false) noexcept {
+void handle_config_line(const char* line,
+                        ConfigChannel channel = ConfigChannel::Serial,
+                        uint8_t seq = 0) noexcept {
+#if !TANDEM_CAP_NATIVE_USB
+  (void)seq;
+#endif
+  struct CallbackContext {
+    ConfigChannel channel;
+  } cb_ctx{channel};
+
   tandem::config::ConfigCallbacks cbs{};
-  cbs.ctx = &via_ble;
+  cbs.ctx = &cb_ctx;
   cbs.on_live_changed = [](void* ctx, bool enabled) {
-    const bool from_ble = (ctx != nullptr) && *static_cast<const bool*>(ctx);
-    if (from_ble) {
+    const auto ch = (ctx != nullptr)
+                        ? static_cast<const CallbackContext*>(ctx)->channel
+                        : ConfigChannel::Serial;
+    if (ch == ConfigChannel::Ble) {
       g_live_ble = enabled;
+    } else if (ch == ConfigChannel::WebHid) {
+      g_live_webhid = enabled;
     } else {
       g_live_serial = enabled;
     }
@@ -302,9 +330,13 @@ void handle_config_line(const char* line, bool via_ble = false) noexcept {
   const size_t n = tandem::config::process_command(
       line, build_capabilities(), g_input_config, cbs, resp, sizeof(resp));
   if (n > 0) {
-    if (via_ble) {
+    if (channel == ConfigChannel::Ble) {
 #if TANDEM_CAP_BLE
       g_ble_config_transport.send_response(resp, n);
+#endif
+    } else if (channel == ConfigChannel::WebHid) {
+#if TANDEM_CAP_NATIVE_USB
+      g_usb_transport.send_config_response(seq, resp, n);
 #endif
     } else {
       Serial.print(resp);
@@ -362,7 +394,7 @@ void poll_controls(uint32_t now_ms) noexcept {
       }
       Serial.printf("[stick] id -> %s\n",
                     (g_stick_id == tandem::StickId::Left) ? "LEFT" : "RIGHT");
-      emit_serial_caps_if_streaming();
+      emit_unsolicited_caps_if_streaming();
     } else if (ch != '\r' && ch != '\n') {
       Serial.printf("[stick] ERROR: unknown command '%c' (use t/m/1/2/3/4/i)\n",
                     (ch >= 32 && ch < 127) ? static_cast<char>(ch) : '?');
@@ -387,10 +419,16 @@ void poll_controls(uint32_t now_ms) noexcept {
               err_resp, static_cast<size_t>(n));
         }
       } else {
-        handle_config_line(ble_cmd, true);
+        handle_config_line(ble_cmd, ConfigChannel::Ble);
       }
     }
   }
+#endif
+
+#if TANDEM_CAP_NATIVE_USB
+  g_usb_transport.drain_config_commands([](const char* hid_cmd, uint8_t hid_seq) {
+    handle_config_line(hid_cmd, ConfigChannel::WebHid, hid_seq);
+  });
 #endif
 
   const bool raw_pressed = (digitalRead(tandem::board::kPinBootButton) == LOW);
@@ -570,7 +608,12 @@ void loop() {
   ble_live_active = g_live_ble;
 #endif
 
-  if (g_live_serial || ble_live_active) {
+  bool webhid_live_active = false;
+#if TANDEM_CAP_NATIVE_USB
+  webhid_live_active = g_live_webhid;
+#endif
+
+  if (g_live_serial || ble_live_active || webhid_live_active) {
     if (static_cast<uint32_t>(now_ms - g_last_live_ms) >= kLiveStreamIntervalMs) {
       g_last_live_ms = now_ms;
       char resp[tandem::config::kMaxResponseLength]{};
@@ -586,10 +629,23 @@ void loop() {
           g_ble_config_transport.send_live(resp, n);
         }
 #endif
+#if TANDEM_CAP_NATIVE_USB
+        if (webhid_live_active) {
+          g_usb_transport.send_config_live(resp, n);
+        }
+#endif
       }
     }
   } else if (static_cast<uint32_t>(now_ms - g_last_status_ms) >= kStatusIntervalMs) {
     g_last_status_ms = now_ms;
     print_status(now_ms);
   }
+
+#if TANDEM_CAP_NATIVE_USB
+  bool webhid_stalled = false;
+  g_usb_transport.poll_config_tx(now_ms, webhid_stalled);
+  if (webhid_stalled) {
+    g_live_webhid = false;
+  }
+#endif
 }
