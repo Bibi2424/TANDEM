@@ -23,6 +23,7 @@ inline constexpr uint8_t kHidHatMax = 8;
 // - 8 x 16-bit signed LE axes (X, Y, Z, Rx, Ry, Rz, Slider, Dial), [-32767, +32767]
 // - 32 x 1-bit buttons (Usage 1..32, LE uint32_t)
 // - 1 x 4-bit 8-way POV hat switch (1..8, Null State = 0 centered) + 4-bit constant pad
+// clang-format off
 inline constexpr uint8_t kHidJoystickReportDescriptor[] = {
     0x05, 0x01,  // Usage Page (Generic Desktop)
     0x09, 0x04,  // Usage (Joystick)
@@ -72,23 +73,20 @@ inline constexpr uint8_t kHidJoystickReportDescriptor[] = {
 
     0xC0,  // End Collection
 };
+// clang-format on
 
-inline constexpr size_t kHidJoystickReportDescriptorBytes =
-    sizeof(kHidJoystickReportDescriptor);
+inline constexpr size_t kHidJoystickReportDescriptorBytes = sizeof(kHidJoystickReportDescriptor);
 
 struct HidJoystickReport {
   uint8_t bytes[kHidJoystickReportBytes]{};
 };
 
-static_assert(sizeof(HidJoystickReport) == kHidJoystickReportBytes,
-              "HidJoystickReport must be exactly 21 bytes");
+static_assert(sizeof(HidJoystickReport) == kHidJoystickReportBytes, "HidJoystickReport must be exactly 21 bytes");
 
 /// Encodes `state` into the canonical 21-byte little-endian HID Joystick payload.
 /// Clamps axes to [kAxisMin, kAxisMax] (blocking INT16_MIN) and hat > 8 to kHatCentered.
 /// Returns false if `out` is null or `out_len < kHidJoystickReportBytes`.
-bool encode_hid_joystick_report(const StickState& state,
-                                uint8_t* out,
-                                size_t out_len) noexcept;
+bool encode_hid_joystick_report(const StickState& state, uint8_t* out, size_t out_len) noexcept;
 
 /// Convenience overload returning a packed HidJoystickReport by value.
 HidJoystickReport encode_hid_joystick_report(const StickState& state) noexcept;

@@ -1,5 +1,6 @@
-#include <cstdint>
 #include <unity.h>
+
+#include <cstdint>
 
 #include "tandem/hid_report.h"
 
@@ -24,8 +25,7 @@ void test_descriptor_header_and_size() {
   TEST_ASSERT_EQUAL_HEX8(tandem::kHidReportIdJoystick, tandem::kHidJoystickReportDescriptor[7]);
 
   // End Collection
-  TEST_ASSERT_EQUAL_HEX8(
-      0xC0U, tandem::kHidJoystickReportDescriptor[tandem::kHidJoystickReportDescriptorBytes - 1]);
+  TEST_ASSERT_EQUAL_HEX8(0xC0U, tandem::kHidJoystickReportDescriptor[tandem::kHidJoystickReportDescriptorBytes - 1]);
 }
 
 void test_encode_centered_state_is_all_zeros() {
@@ -39,8 +39,8 @@ void test_encode_centered_state_is_all_zeros() {
 
 void test_encode_axes_buttons_and_hat_little_endian() {
   tandem::StickState state{};
-  state.axes[0] = 0x1234;          // LE: 0x34, 0x12
-  state.axes[1] = -0x1234;         // -4660 = 0xEDCC -> LE: 0xCC, 0xED
+  state.axes[0] = 0x1234;            // LE: 0x34, 0x12
+  state.axes[1] = -0x1234;           // -4660 = 0xEDCC -> LE: 0xCC, 0xED
   state.axes[2] = tandem::kAxisMin;  // -32767 = 0x8001 -> LE: 0x01, 0x80
   state.axes[3] = tandem::kAxisMax;  // +32767 = 0x7FFF -> LE: 0xFF, 0x7F
   state.axes[4] = 1;

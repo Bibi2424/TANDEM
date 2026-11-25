@@ -37,10 +37,8 @@ NvsLoadStatus load_stick_config(StickInputConfig& out) noexcept {
     return NvsLoadStatus::CorruptOrInvalid;
   }
 
-  const tandem::ConfigDecodeResult res =
-      tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes), out);
-  return (res == tandem::ConfigDecodeResult::Ok) ? NvsLoadStatus::Loaded
-                                                 : NvsLoadStatus::CorruptOrInvalid;
+  const tandem::ConfigDecodeResult res = tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes), out);
+  return (res == tandem::ConfigDecodeResult::Ok) ? NvsLoadStatus::Loaded : NvsLoadStatus::CorruptOrInvalid;
 }
 
 bool save_stick_config(const StickInputConfig& cfg) noexcept {

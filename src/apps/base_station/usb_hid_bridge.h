@@ -17,16 +17,13 @@ namespace tandem::base_usb {
 inline constexpr bool kCombinedMode = (TANDEM_BASE_COMBINED_MODE != 0);
 inline constexpr uint16_t kUsbVid = 0x303AU;
 inline constexpr uint16_t kUsbPid = kCombinedMode ? 0x80C5U : 0x80C4U;
-inline constexpr const char* kHidInterfaceName =
-    kCombinedMode ? "TANDEM Combined Stick" : "TANDEM Base Station";
+inline constexpr const char* kHidInterfaceName = kCombinedMode ? "TANDEM Combined Stick" : "TANDEM Base Station";
 
 inline constexpr uint8_t kReportIdLeft = 1U;
 inline constexpr uint8_t kReportIdRight = 2U;
 inline constexpr size_t kJoystickDescriptorBytes =
-    kCombinedMode ? tandem::kHidJoystickReportDescriptorBytes
-                  : (tandem::kHidJoystickReportDescriptorBytes * 2U);
-inline constexpr size_t kReportDescriptorBytes =
-    kJoystickDescriptorBytes + tandem::config::kHidConfigReportDescriptorBytes;
+    kCombinedMode ? tandem::kHidJoystickReportDescriptorBytes : (tandem::kHidJoystickReportDescriptorBytes * 2U);
+inline constexpr size_t kReportDescriptorBytes = kJoystickDescriptorBytes + tandem::config::kHidConfigReportDescriptorBytes;
 
 /// Initializes USB identity and starts the TinyUSB composite HID+CDC device.
 void begin() noexcept;

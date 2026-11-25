@@ -36,10 +36,8 @@ void test_synthetic_sets_connected_flag_and_valid_ranges() {
 }
 
 void test_synthetic_left_and_right_are_distinct() {
-  const tandem::StickState left =
-      tandem::make_synthetic_stick_state(1234U, tandem::StickId::Left);
-  const tandem::StickState right =
-      tandem::make_synthetic_stick_state(1234U, tandem::StickId::Right);
+  const tandem::StickState left = tandem::make_synthetic_stick_state(1234U, tandem::StickId::Left);
+  const tandem::StickState right = tandem::make_synthetic_stick_state(1234U, tandem::StickId::Right);
 
   TEST_ASSERT_NOT_EQUAL_UINT32(left.buttons, right.buttons);
   bool any_axis_diff = false;
@@ -53,17 +51,12 @@ void test_synthetic_left_and_right_are_distinct() {
 }
 
 void test_synthetic_buttons_cycle_every_250ms() {
-  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 0,
-                           tandem::make_synthetic_stick_state(0U, tandem::StickId::Left).buttons);
-  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 1,
-                           tandem::make_synthetic_stick_state(250U, tandem::StickId::Left).buttons);
-  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 31,
-                           tandem::make_synthetic_stick_state(7750U, tandem::StickId::Left).buttons);
-  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 0,
-                           tandem::make_synthetic_stick_state(8000U, tandem::StickId::Left).buttons);
+  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 0, tandem::make_synthetic_stick_state(0U, tandem::StickId::Left).buttons);
+  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 1, tandem::make_synthetic_stick_state(250U, tandem::StickId::Left).buttons);
+  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 31, tandem::make_synthetic_stick_state(7750U, tandem::StickId::Left).buttons);
+  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 0, tandem::make_synthetic_stick_state(8000U, tandem::StickId::Left).buttons);
 
-  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 16,
-                           tandem::make_synthetic_stick_state(0U, tandem::StickId::Right).buttons);
+  TEST_ASSERT_EQUAL_UINT32(uint32_t{1} << 16, tandem::make_synthetic_stick_state(0U, tandem::StickId::Right).buttons);
 }
 
 void test_synthetic_hat_cycles_0_to_8_every_500ms() {

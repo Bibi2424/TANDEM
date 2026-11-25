@@ -94,21 +94,14 @@ const char* caps_role_str(const DeviceCapabilities& caps) noexcept {
   return stick_role_str(caps.stick_id);
 }
 
-bool append_transports_array(char* out,
-                             size_t out_size,
-                             size_t& pos,
-                             uint8_t mask) noexcept {
+bool append_transports_array(char* out, size_t out_size, size_t& pos, uint8_t mask) noexcept {
   struct TransportEntry {
     uint8_t bit;
     const char* name;
   };
   static constexpr TransportEntry kEntries[] = {
-      {kTransportMaskUsbHid, "USB_HID"},
-      {kTransportMaskBleHid, "BLE_HID"},
-      {kTransportMaskEspNowTx, "ESPNOW_TX"},
-      {kTransportMaskBleConfig, "BLE_CFG"},
-      {kTransportMaskEspNowRx, "ESPNOW_RX"},
-      {kTransportMaskUsbSerial, "USB_SERIAL"},
+      {kTransportMaskUsbHid, "USB_HID"},    {kTransportMaskBleHid, "BLE_HID"},     {kTransportMaskEspNowTx, "ESPNOW_TX"},
+      {kTransportMaskBleConfig, "BLE_CFG"}, {kTransportMaskEspNowRx, "ESPNOW_RX"}, {kTransportMaskUsbSerial, "USB_SERIAL"},
       {kTransportMaskWebHid, "WEBHID"},
   };
   if (!append_fmt(out, out_size, pos, "[")) {
@@ -126,10 +119,7 @@ bool append_transports_array(char* out,
   return append_fmt(out, out_size, pos, "]");
 }
 
-bool append_tlm_fields(char* out,
-                       size_t out_size,
-                       size_t& pos,
-                       const TelemetrySnapshot& tlm) noexcept {
+bool append_tlm_fields(char* out, size_t out_size, size_t& pos, const TelemetrySnapshot& tlm) noexcept {
   if (!append_fmt(out, out_size, pos, "{")) {
     return false;
   }
@@ -140,32 +130,25 @@ bool append_tlm_fields(char* out,
     return s;
   };
 
-  if (tlm.has_sample_hz &&
-      !append_fmt(out, out_size, pos, "%s\"hz\":%u", sep(), static_cast<unsigned>(tlm.sample_hz))) {
+  if (tlm.has_sample_hz && !append_fmt(out, out_size, pos, "%s\"hz\":%u", sep(), static_cast<unsigned>(tlm.sample_hz))) {
     return false;
   }
-  if (tlm.has_tx_hz &&
-      !append_fmt(out, out_size, pos, "%s\"tx_hz\":%u", sep(), static_cast<unsigned>(tlm.tx_hz))) {
+  if (tlm.has_tx_hz && !append_fmt(out, out_size, pos, "%s\"tx_hz\":%u", sep(), static_cast<unsigned>(tlm.tx_hz))) {
     return false;
   }
-  if (tlm.has_rssi &&
-      !append_fmt(out, out_size, pos, "%s\"rssi\":%d", sep(), static_cast<int>(tlm.rssi_dbm))) {
+  if (tlm.has_rssi && !append_fmt(out, out_size, pos, "%s\"rssi\":%d", sep(), static_cast<int>(tlm.rssi_dbm))) {
     return false;
   }
-  if (tlm.has_dropped &&
-      !append_fmt(out, out_size, pos, "%s\"drop\":%lu", sep(), static_cast<unsigned long>(tlm.dropped_packets))) {
+  if (tlm.has_dropped && !append_fmt(out, out_size, pos, "%s\"drop\":%lu", sep(), static_cast<unsigned long>(tlm.dropped_packets))) {
     return false;
   }
-  if (tlm.has_failsafe &&
-      !append_fmt(out, out_size, pos, "%s\"fs\":%s", sep(), tlm.failsafe_active ? "true" : "false")) {
+  if (tlm.has_failsafe && !append_fmt(out, out_size, pos, "%s\"fs\":%s", sep(), tlm.failsafe_active ? "true" : "false")) {
     return false;
   }
-  if (tlm.has_battery_mv &&
-      !append_fmt(out, out_size, pos, "%s\"bat_mv\":%u", sep(), static_cast<unsigned>(tlm.battery_mv))) {
+  if (tlm.has_battery_mv && !append_fmt(out, out_size, pos, "%s\"bat_mv\":%u", sep(), static_cast<unsigned>(tlm.battery_mv))) {
     return false;
   }
-  if (tlm.has_battery_pct &&
-      !append_fmt(out, out_size, pos, "%s\"bat_pct\":%u", sep(), static_cast<unsigned>(tlm.battery_pct))) {
+  if (tlm.has_battery_pct && !append_fmt(out, out_size, pos, "%s\"bat_pct\":%u", sep(), static_cast<unsigned>(tlm.battery_pct))) {
     return false;
   }
   if (tlm.has_peer_status && tlm.peer_status != nullptr && tlm.peer_status[0] != '\0' &&
@@ -177,14 +160,8 @@ bool append_tlm_fields(char* out,
 
 size_t format_error(const char* cmd, const char* err, char* out, size_t out_size) noexcept {
   size_t pos = 0;
-  if (!append_fmt(out,
-                  out_size,
-                  pos,
-                  "%s{\"v\":%u,\"cmd\":\"%s\",\"ok\":false,\"err\":\"%s\"}\n",
-                  kResponsePrefix,
-                  static_cast<unsigned>(kProtocolVersion),
-                  cmd != nullptr ? cmd : "unknown",
-                  err != nullptr ? err : "error")) {
+  if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"%s\",\"ok\":false,\"err\":\"%s\"}\n", kResponsePrefix,
+                  static_cast<unsigned>(kProtocolVersion), cmd != nullptr ? cmd : "unknown", err != nullptr ? err : "error")) {
     return 0;
   }
   return pos;
@@ -196,38 +173,19 @@ bool token_equals(const char* tok, size_t tok_len, const char* literal) noexcept
 
 }  // namespace
 
-size_t format_caps_response(const DeviceCapabilities& caps,
-                            char* out,
-                            size_t out_size) noexcept {
+size_t format_caps_response(const DeviceCapabilities& caps, char* out, size_t out_size) noexcept {
   size_t pos = 0;
-  const char* fw = (caps.fw_version != nullptr && caps.fw_version[0] != '\0')
-                       ? caps.fw_version
-                       : core_version();
-  const char* git = (caps.git_commit != nullptr && caps.git_commit[0] != '\0')
-                        ? caps.git_commit
-                        : core_git_commit();
-  if (!append_fmt(
-          out,
-          out_size,
-          pos,
-          "%s{\"v\":%u,\"cmd\":\"caps\",\"ok\":true,\"board\":\"%s\",\"role\":\"%s\","
-          "\"mode\":\"%s\",\"synth\":%s,\"max_axes\":%u,\"axes_mask\":%u,"
-          "\"btns_mask\":%lu,\"hat\":%s,\"adc_max\":%ld,\"cfg\":%s,"
-          "\"fw\":\"%s\",\"git\":\"%s\",\"transports\":",
-          kResponsePrefix,
-          static_cast<unsigned>(kProtocolVersion),
-          caps.board != nullptr ? caps.board : "UNKNOWN",
-          caps_role_str(caps),
-          caps.transport_mode != nullptr ? caps.transport_mode : "UNKNOWN",
-          caps.synthetic ? "true" : "false",
-          static_cast<unsigned>(kMaxAxes),
-          static_cast<unsigned>(caps.axes_mask),
-          static_cast<unsigned long>(caps.buttons_mask),
-          caps.has_hat ? "true" : "false",
-          static_cast<long>(caps.adc_max),
-          caps.has_config ? "true" : "false",
-          fw,
-          git)) {
+  const char* fw = (caps.fw_version != nullptr && caps.fw_version[0] != '\0') ? caps.fw_version : core_version();
+  const char* git = (caps.git_commit != nullptr && caps.git_commit[0] != '\0') ? caps.git_commit : core_git_commit();
+  if (!append_fmt(out, out_size, pos,
+                  "%s{\"v\":%u,\"cmd\":\"caps\",\"ok\":true,\"board\":\"%s\",\"role\":\"%s\","
+                  "\"mode\":\"%s\",\"synth\":%s,\"max_axes\":%u,\"axes_mask\":%u,"
+                  "\"btns_mask\":%lu,\"hat\":%s,\"adc_max\":%ld,\"cfg\":%s,"
+                  "\"fw\":\"%s\",\"git\":\"%s\",\"transports\":",
+                  kResponsePrefix, static_cast<unsigned>(kProtocolVersion), caps.board != nullptr ? caps.board : "UNKNOWN", caps_role_str(caps),
+                  caps.transport_mode != nullptr ? caps.transport_mode : "UNKNOWN", caps.synthetic ? "true" : "false",
+                  static_cast<unsigned>(kMaxAxes), static_cast<unsigned>(caps.axes_mask), static_cast<unsigned long>(caps.buttons_mask),
+                  caps.has_hat ? "true" : "false", static_cast<long>(caps.adc_max), caps.has_config ? "true" : "false", fw, git)) {
     return 0;
   }
   if (!append_transports_array(out, out_size, pos, caps.transports_mask)) {
@@ -244,23 +202,13 @@ size_t format_caps_response(const DeviceCapabilities& caps,
   return pos;
 }
 
-size_t format_status_response(const DeviceCapabilities& caps,
-                              const TelemetrySnapshot& tlm,
-                              char* out,
-                              size_t out_size) noexcept {
+size_t format_status_response(const DeviceCapabilities& caps, const TelemetrySnapshot& tlm, char* out, size_t out_size) noexcept {
   size_t pos = 0;
-  if (!append_fmt(
-          out,
-          out_size,
-          pos,
-          "%s{\"v\":%u,\"cmd\":\"status\",\"ok\":true,\"board\":\"%s\",\"role\":\"%s\","
-          "\"mode\":\"%s\",\"synth\":%s,\"tlm\":",
-          kResponsePrefix,
-          static_cast<unsigned>(kProtocolVersion),
-          caps.board != nullptr ? caps.board : "UNKNOWN",
-          caps_role_str(caps),
-          caps.transport_mode != nullptr ? caps.transport_mode : "UNKNOWN",
-          caps.synthetic ? "true" : "false")) {
+  if (!append_fmt(out, out_size, pos,
+                  "%s{\"v\":%u,\"cmd\":\"status\",\"ok\":true,\"board\":\"%s\",\"role\":\"%s\","
+                  "\"mode\":\"%s\",\"synth\":%s,\"tlm\":",
+                  kResponsePrefix, static_cast<unsigned>(kProtocolVersion), caps.board != nullptr ? caps.board : "UNKNOWN", caps_role_str(caps),
+                  caps.transport_mode != nullptr ? caps.transport_mode : "UNKNOWN", caps.synthetic ? "true" : "false")) {
     return 0;
   }
   if (!append_tlm_fields(out, out_size, pos, tlm)) {
@@ -272,37 +220,21 @@ size_t format_status_response(const DeviceCapabilities& caps,
   return pos;
 }
 
-size_t format_get_response(const StickInputConfig& cfg,
-                           char* out,
-                           size_t out_size) noexcept {
+size_t format_get_response(const StickInputConfig& cfg, char* out, size_t out_size) noexcept {
   size_t pos = 0;
-  if (!append_fmt(out,
-                  out_size,
-                  pos,
-                  "%s{\"v\":%u,\"cmd\":\"get\",\"ok\":true,\"axes\":[",
-                  kResponsePrefix,
+  if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"get\",\"ok\":true,\"axes\":[", kResponsePrefix,
                   static_cast<unsigned>(kProtocolVersion))) {
     return 0;
   }
 
   for (uint8_t i = 0; i < kMaxAxes; ++i) {
     const AxisConfig& ax = cfg.axes[i];
-    if (!append_fmt(
-            out,
-            out_size,
-            pos,
-            "%s{\"i\":%u,\"en\":%u,\"min\":%ld,\"ctr\":%ld,\"max\":%ld,"
-            "\"dz\":%.4f,\"inv\":%u,\"crv\":%u,\"p\":%.4f}",
-            (i == 0) ? "" : ",",
-            static_cast<unsigned>(i),
-            ax.enabled ? 1u : 0u,
-            static_cast<long>(ax.calibration.min),
-            static_cast<long>(ax.calibration.center),
-            static_cast<long>(ax.calibration.max),
-            static_cast<double>(ax.deadzone),
-            ax.invert ? 1u : 0u,
-            static_cast<unsigned>(ax.curve.type),
-            static_cast<double>(ax.curve.param))) {
+    if (!append_fmt(out, out_size, pos,
+                    "%s{\"i\":%u,\"en\":%u,\"min\":%ld,\"ctr\":%ld,\"max\":%ld,"
+                    "\"dz\":%.4f,\"inv\":%u,\"crv\":%u,\"p\":%.4f}",
+                    (i == 0) ? "" : ",", static_cast<unsigned>(i), ax.enabled ? 1u : 0u, static_cast<long>(ax.calibration.min),
+                    static_cast<long>(ax.calibration.center), static_cast<long>(ax.calibration.max), static_cast<double>(ax.deadzone),
+                    ax.invert ? 1u : 0u, static_cast<unsigned>(ax.curve.type), static_cast<double>(ax.curve.param))) {
       return 0;
     }
   }
@@ -313,34 +245,20 @@ size_t format_get_response(const StickInputConfig& cfg,
   return pos;
 }
 
-size_t format_live_response(const RawStickInput& raw,
-                            const StickState& state,
-                            bool synthetic,
-                            char* out,
-                            size_t out_size) noexcept {
+size_t format_live_response(const RawStickInput& raw, const StickState& state, bool synthetic, char* out, size_t out_size) noexcept {
   return format_live_response(raw, state, synthetic, TelemetrySnapshot{}, out, out_size);
 }
 
-size_t format_live_response(const RawStickInput& raw,
-                            const StickState& state,
-                            bool synthetic,
-                            const TelemetrySnapshot& tlm,
-                            char* out,
+size_t format_live_response(const RawStickInput& raw, const StickState& state, bool synthetic, const TelemetrySnapshot& tlm, char* out,
                             size_t out_size) noexcept {
   size_t pos = 0;
-  if (!append_fmt(out,
-                  out_size,
-                  pos,
-                  "%s{\"v\":%u,\"cmd\":\"live\",\"ok\":true,\"synth\":%s,\"raw\":[",
-                  kResponsePrefix,
-                  static_cast<unsigned>(kProtocolVersion),
-                  synthetic ? "true" : "false")) {
+  if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"live\",\"ok\":true,\"synth\":%s,\"raw\":[", kResponsePrefix,
+                  static_cast<unsigned>(kProtocolVersion), synthetic ? "true" : "false")) {
     return 0;
   }
 
   for (uint8_t i = 0; i < kMaxAxes; ++i) {
-    if (!append_fmt(out, out_size, pos, "%s%ld", (i == 0) ? "" : ",",
-                    static_cast<long>(raw.axes[i]))) {
+    if (!append_fmt(out, out_size, pos, "%s%ld", (i == 0) ? "" : ",", static_cast<long>(raw.axes[i]))) {
       return 0;
     }
   }
@@ -350,23 +268,16 @@ size_t format_live_response(const RawStickInput& raw,
   }
 
   for (uint8_t i = 0; i < kMaxAxes; ++i) {
-    if (!append_fmt(out, out_size, pos, "%s%d", (i == 0) ? "" : ",",
-                    static_cast<int>(state.axes[i]))) {
+    if (!append_fmt(out, out_size, pos, "%s%d", (i == 0) ? "" : ",", static_cast<int>(state.axes[i]))) {
       return 0;
     }
   }
 
-  if (!append_fmt(out,
-                  out_size,
-                  pos,
-                  "],\"btns\":%lu,\"hat\":%u",
-                  static_cast<unsigned long>(state.buttons),
-                  static_cast<unsigned>(state.hat))) {
+  if (!append_fmt(out, out_size, pos, "],\"btns\":%lu,\"hat\":%u", static_cast<unsigned long>(state.buttons), static_cast<unsigned>(state.hat))) {
     return 0;
   }
   if (tlm.has_any()) {
-    if (!append_fmt(out, out_size, pos, ",\"tlm\":") ||
-        !append_tlm_fields(out, out_size, pos, tlm)) {
+    if (!append_fmt(out, out_size, pos, ",\"tlm\":") || !append_tlm_fields(out, out_size, pos, tlm)) {
       return 0;
     }
   }
@@ -376,11 +287,7 @@ size_t format_live_response(const RawStickInput& raw,
   return pos;
 }
 
-size_t process_command(const char* line,
-                       const DeviceCapabilities& caps,
-                       StickInputConfig& cfg,
-                       const ConfigCallbacks& callbacks,
-                       char* out,
+size_t process_command(const char* line, const DeviceCapabilities& caps, StickInputConfig& cfg, const ConfigCallbacks& callbacks, char* out,
                        size_t out_size) noexcept {
   if (out == nullptr || out_size == 0) {
     return 0;
@@ -443,10 +350,8 @@ size_t process_command(const char* line,
     int32_t crv = 0;
     float param = 0.0f;
 
-    if (!parse_int32(p, axis) || !parse_int32(p, en) || !parse_int32(p, min_v) ||
-        !parse_int32(p, ctr_v) || !parse_int32(p, max_v) || !parse_float(p, dz) ||
-        !parse_int32(p, inv) || !parse_int32(p, crv) || !parse_float(p, param) ||
-        !has_no_trailing_tokens(p)) {
+    if (!parse_int32(p, axis) || !parse_int32(p, en) || !parse_int32(p, min_v) || !parse_int32(p, ctr_v) || !parse_int32(p, max_v) ||
+        !parse_float(p, dz) || !parse_int32(p, inv) || !parse_int32(p, crv) || !parse_float(p, param) || !has_no_trailing_tokens(p)) {
       return format_error("set", "invalid_args", out, out_size);
     }
 
@@ -462,8 +367,7 @@ size_t process_command(const char* line,
     if (!std::isfinite(dz) || dz < 0.0f || dz >= 1.0f) {
       return format_error("set", "invalid_deadzone", out, out_size);
     }
-    if (crv != static_cast<int32_t>(CurveType::Linear) &&
-        crv != static_cast<int32_t>(CurveType::Expo)) {
+    if (crv != static_cast<int32_t>(CurveType::Linear) && crv != static_cast<int32_t>(CurveType::Expo)) {
       return format_error("set", "invalid_curve", out, out_size);
     }
     if (!std::isfinite(param) || param < 0.0f || param > 1.0f) {
@@ -481,13 +385,8 @@ size_t process_command(const char* line,
     dst.curve.param = param;
 
     size_t pos = 0;
-    if (!append_fmt(out,
-                    out_size,
-                    pos,
-                    "%s{\"v\":%u,\"cmd\":\"set\",\"ok\":true,\"i\":%ld}\n",
-                    kResponsePrefix,
-                    static_cast<unsigned>(kProtocolVersion),
-                    static_cast<long>(axis))) {
+    if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"set\",\"ok\":true,\"i\":%ld}\n", kResponsePrefix,
+                    static_cast<unsigned>(kProtocolVersion), static_cast<long>(axis))) {
       return 0;
     }
     return pos;
@@ -495,21 +394,15 @@ size_t process_command(const char* line,
 
   if (token_equals(cmd_start, cmd_len, "live")) {
     int32_t enabled = 0;
-    if (!parse_int32(p, enabled) || !has_no_trailing_tokens(p) ||
-        (enabled != 0 && enabled != 1)) {
+    if (!parse_int32(p, enabled) || !has_no_trailing_tokens(p) || (enabled != 0 && enabled != 1)) {
       return format_error("live", "invalid_args", out, out_size);
     }
     if (callbacks.on_live_changed != nullptr) {
       callbacks.on_live_changed(callbacks.ctx, enabled == 1);
     }
     size_t pos = 0;
-    if (!append_fmt(out,
-                    out_size,
-                    pos,
-                    "%s{\"v\":%u,\"cmd\":\"live\",\"ok\":true,\"streaming\":%s}\n",
-                    kResponsePrefix,
-                    static_cast<unsigned>(kProtocolVersion),
-                    (enabled == 1) ? "true" : "false")) {
+    if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"live\",\"ok\":true,\"streaming\":%s}\n", kResponsePrefix,
+                    static_cast<unsigned>(kProtocolVersion), (enabled == 1) ? "true" : "false")) {
       return 0;
     }
     return pos;
@@ -526,12 +419,7 @@ size_t process_command(const char* line,
       return format_error("save", "save_failed", out, out_size);
     }
     size_t pos = 0;
-    if (!append_fmt(out,
-                    out_size,
-                    pos,
-                    "%s{\"v\":%u,\"cmd\":\"save\",\"ok\":true}\n",
-                    kResponsePrefix,
-                    static_cast<unsigned>(kProtocolVersion))) {
+    if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"save\",\"ok\":true}\n", kResponsePrefix, static_cast<unsigned>(kProtocolVersion))) {
       return 0;
     }
     return pos;
@@ -549,12 +437,7 @@ size_t process_command(const char* line,
       cfg = StickInputConfig{};
     }
     size_t pos = 0;
-    if (!append_fmt(out,
-                    out_size,
-                    pos,
-                    "%s{\"v\":%u,\"cmd\":\"reset\",\"ok\":true}\n",
-                    kResponsePrefix,
-                    static_cast<unsigned>(kProtocolVersion))) {
+    if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"reset\",\"ok\":true}\n", kResponsePrefix, static_cast<unsigned>(kProtocolVersion))) {
       return 0;
     }
     return pos;

@@ -55,10 +55,8 @@ void test_roundtrip_encode_decode() {
   TEST_ASSERT_TRUE(tandem::encode_stick_config(original, blob));
 
   tandem::StickInputConfig decoded{};
-  const tandem::ConfigDecodeResult res =
-      tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes), decoded);
-  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::Ok),
-                          static_cast<uint8_t>(res));
+  const tandem::ConfigDecodeResult res = tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes), decoded);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::Ok), static_cast<uint8_t>(res));
 
   for (uint8_t i = 0; i < tandem::kMaxAxes; ++i) {
     TEST_ASSERT_EQUAL(original.axes[i].enabled, decoded.axes[i].enabled);
@@ -67,8 +65,7 @@ void test_roundtrip_encode_decode() {
     TEST_ASSERT_EQUAL_INT32(original.axes[i].calibration.center, decoded.axes[i].calibration.center);
     TEST_ASSERT_EQUAL_INT32(original.axes[i].calibration.max, decoded.axes[i].calibration.max);
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, original.axes[i].deadzone, decoded.axes[i].deadzone);
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(original.axes[i].curve.type),
-                            static_cast<uint8_t>(decoded.axes[i].curve.type));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(original.axes[i].curve.type), static_cast<uint8_t>(decoded.axes[i].curve.type));
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, original.axes[i].curve.param, decoded.axes[i].curve.param);
   }
 }
@@ -84,19 +81,15 @@ void test_corrupt_crc_rejected_and_preserves_out() {
   // Flip a bit in payload
   tandem::PersistedConfigBlob bad_payload = blob;
   bad_payload.bytes[20] ^= 0x01U;
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::BadCrc),
-      static_cast<uint8_t>(
-          tandem::decode_stick_config(bad_payload.bytes, sizeof(bad_payload.bytes), sentinel)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::BadCrc),
+                          static_cast<uint8_t>(tandem::decode_stick_config(bad_payload.bytes, sizeof(bad_payload.bytes), sentinel)));
   TEST_ASSERT_EQUAL_INT32(500, sentinel.axes[0].calibration.center);
 
   // Flip a bit in CRC trailer
   tandem::PersistedConfigBlob bad_crc = blob;
   bad_crc.bytes[tandem::kPersistedConfigBytes - 1U] ^= 0x80U;
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::BadCrc),
-      static_cast<uint8_t>(
-          tandem::decode_stick_config(bad_crc.bytes, sizeof(bad_crc.bytes), sentinel)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::BadCrc),
+                          static_cast<uint8_t>(tandem::decode_stick_config(bad_crc.bytes, sizeof(bad_crc.bytes), sentinel)));
   TEST_ASSERT_EQUAL_INT32(500, sentinel.axes[0].calibration.center);
 }
 
@@ -106,33 +99,25 @@ void test_header_and_length_errors() {
   TEST_ASSERT_TRUE(tandem::encode_stick_config(cfg, blob));
 
   tandem::StickInputConfig out{};
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidLength),
-      static_cast<uint8_t>(tandem::decode_stick_config(nullptr, sizeof(blob.bytes), out)));
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidLength),
-      static_cast<uint8_t>(tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes) - 1U, out)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidLength),
+                          static_cast<uint8_t>(tandem::decode_stick_config(nullptr, sizeof(blob.bytes), out)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidLength),
+                          static_cast<uint8_t>(tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes) - 1U, out)));
 
   tandem::PersistedConfigBlob bad_magic = blob;
   bad_magic.bytes[0] = 'X';
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::BadMagic),
-      static_cast<uint8_t>(
-          tandem::decode_stick_config(bad_magic.bytes, sizeof(bad_magic.bytes), out)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::BadMagic),
+                          static_cast<uint8_t>(tandem::decode_stick_config(bad_magic.bytes, sizeof(bad_magic.bytes), out)));
 
   tandem::PersistedConfigBlob bad_ver = blob;
   bad_ver.bytes[4] = 99U;
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::UnsupportedVersion),
-      static_cast<uint8_t>(
-          tandem::decode_stick_config(bad_ver.bytes, sizeof(bad_ver.bytes), out)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::UnsupportedVersion),
+                          static_cast<uint8_t>(tandem::decode_stick_config(bad_ver.bytes, sizeof(bad_ver.bytes), out)));
 
   tandem::PersistedConfigBlob bad_axes = blob;
   bad_axes.bytes[6] = 4U;
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidAxisCount),
-      static_cast<uint8_t>(
-          tandem::decode_stick_config(bad_axes.bytes, sizeof(bad_axes.bytes), out)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidAxisCount),
+                          static_cast<uint8_t>(tandem::decode_stick_config(bad_axes.bytes, sizeof(bad_axes.bytes), out)));
 }
 
 void test_invalid_config_rejected() {
@@ -157,14 +142,12 @@ void test_invalid_config_rejected() {
   const tandem::StickInputConfig good = make_sample_config();
   TEST_ASSERT_TRUE(tandem::encode_stick_config(good, blob));
   blob.bytes[tandem::kConfigHeaderBytes + 16U] = 42U;
-  const uint32_t new_crc =
-      tandem::crc32_ieee(blob.bytes, tandem::kPersistedConfigBytes - 4U);
+  const uint32_t new_crc = tandem::crc32_ieee(blob.bytes, tandem::kPersistedConfigBytes - 4U);
   write_u32_le(&blob.bytes[tandem::kPersistedConfigBytes - 4U], new_crc);
 
   tandem::StickInputConfig out{};
-  TEST_ASSERT_EQUAL_UINT8(
-      static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidConfig),
-      static_cast<uint8_t>(tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes), out)));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(tandem::ConfigDecodeResult::InvalidConfig),
+                          static_cast<uint8_t>(tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes), out)));
 }
 
 }  // namespace

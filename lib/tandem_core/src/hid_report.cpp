@@ -20,9 +20,7 @@ uint8_t sanitize_hat(uint8_t hat) noexcept {
 
 }  // namespace
 
-bool encode_hid_joystick_report(const StickState& state,
-                                uint8_t* out,
-                                size_t out_len) noexcept {
+bool encode_hid_joystick_report(const StickState& state, uint8_t* out, size_t out_len) noexcept {
   if (out == nullptr || out_len < kHidJoystickReportBytes) {
     return false;
   }

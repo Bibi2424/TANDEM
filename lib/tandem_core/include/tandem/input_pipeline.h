@@ -20,17 +20,12 @@ struct StickInputConfig {
   AxisConfig axes[kMaxAxes]{};
 };
 
-static_assert(std::is_trivially_copyable_v<RawStickInput>,
-              "RawStickInput must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<StickInputConfig>,
-              "StickInputConfig must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<StickState>,
-              "StickState must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<RawStickInput>, "RawStickInput must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<StickInputConfig>, "StickInputConfig must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<StickState>, "StickState must be trivially copyable");
 
 /// Shapes all stick axes according to `config` and packs buttons/hat/flags into StickState.
 /// Disabled axis slots output kAxisCenter (0) and reserved bytes are zeroed.
-StickState process_stick_input(const RawStickInput& raw,
-                               const StickInputConfig& config,
-                               uint8_t flags = kStateFlagConnected) noexcept;
+StickState process_stick_input(const RawStickInput& raw, const StickInputConfig& config, uint8_t flags = kStateFlagConnected) noexcept;
 
 }  // namespace tandem

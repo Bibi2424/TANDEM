@@ -28,21 +28,16 @@ int16_t clamp_axis(long value) noexcept {
 StickState make_synthetic_stick_state(uint32_t now_ms, StickId stick_id) noexcept {
   StickState state = make_centered_state(kStateFlagConnected);
 
-  const float phase =
-      (static_cast<float>(now_ms % kAxisPeriodMs) / static_cast<float>(kAxisPeriodMs)) *
-      kTwoPi;
+  const float phase = (static_cast<float>(now_ms % kAxisPeriodMs) / static_cast<float>(kAxisPeriodMs)) * kTwoPi;
   const float stick_offset = (stick_id == StickId::Right) ? kPiOver2 : 0.0f;
 
   for (uint8_t i = 0; i < kMaxAxes; ++i) {
-    const float sample =
-        std::sin(phase + stick_offset + static_cast<float>(i) * 0.45f) *
-        static_cast<float>(kAxisMax);
+    const float sample = std::sin(phase + stick_offset + static_cast<float>(i) * 0.45f) * static_cast<float>(kAxisMax);
     state.axes[i] = clamp_axis(std::lround(sample));
   }
 
   const uint8_t btn_offset = (stick_id == StickId::Right) ? 16U : 0U;
-  const uint8_t btn_idx =
-      static_cast<uint8_t>(((now_ms / kButtonStepMs) + btn_offset) % 32U);
+  const uint8_t btn_idx = static_cast<uint8_t>(((now_ms / kButtonStepMs) + btn_offset) % 32U);
   state.buttons = uint32_t{1} << btn_idx;
 
   state.hat = static_cast<uint8_t>((now_ms / kHatStepMs) % 9U);

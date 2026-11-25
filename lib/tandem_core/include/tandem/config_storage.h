@@ -33,17 +33,14 @@ inline constexpr uint16_t kConfigStorageVersion = 1U;
 inline constexpr size_t kConfigHeaderBytes = 8U;
 inline constexpr size_t kConfigAxisRecordBytes = 24U;
 inline constexpr size_t kConfigTrailerBytes = 4U;
-inline constexpr size_t kPersistedConfigBytes =
-    kConfigHeaderBytes + (kMaxAxes * kConfigAxisRecordBytes) + kConfigTrailerBytes;
+inline constexpr size_t kPersistedConfigBytes = kConfigHeaderBytes + (kMaxAxes * kConfigAxisRecordBytes) + kConfigTrailerBytes;
 
 struct PersistedConfigBlob {
   uint8_t bytes[kPersistedConfigBytes]{};
 };
 
-static_assert(sizeof(PersistedConfigBlob) == kPersistedConfigBytes,
-              "PersistedConfigBlob must match kPersistedConfigBytes");
-static_assert(kPersistedConfigBytes == 204U,
-              "PersistedConfigBlob v1 layout must be exactly 204 bytes");
+static_assert(sizeof(PersistedConfigBlob) == kPersistedConfigBytes, "PersistedConfigBlob must match kPersistedConfigBytes");
+static_assert(kPersistedConfigBytes == 204U, "PersistedConfigBlob v1 layout must be exactly 204 bytes");
 
 enum class ConfigDecodeResult : uint8_t {
   Ok = 0,
@@ -65,14 +62,11 @@ bool is_valid_axis_config(const AxisConfig& axis) noexcept;
 bool is_valid_stick_config(const StickInputConfig& cfg) noexcept;
 
 /// Serializes and checksums `cfg` into `out`. Returns false if `cfg` fails validation.
-bool encode_stick_config(const StickInputConfig& cfg,
-                         PersistedConfigBlob& out) noexcept;
+bool encode_stick_config(const StickInputConfig& cfg, PersistedConfigBlob& out) noexcept;
 
 /// Validates magic, version, axis count, CRC-32, and config bounds before updating `out`.
 /// On any failure, `out` is left unmodified.
-ConfigDecodeResult decode_stick_config(const uint8_t* data,
-                                       size_t len,
-                                       StickInputConfig& out) noexcept;
+ConfigDecodeResult decode_stick_config(const uint8_t* data, size_t len, StickInputConfig& out) noexcept;
 
 /// Returns a short human-readable name for `ConfigDecodeResult`.
 const char* config_decode_result_name(ConfigDecodeResult result) noexcept;

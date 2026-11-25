@@ -34,14 +34,11 @@ void write_f32_le(uint8_t* dst, float val) noexcept {
 }
 
 uint16_t read_u16_le(const uint8_t* src) noexcept {
-  return static_cast<uint16_t>(static_cast<uint16_t>(src[0]) |
-                               (static_cast<uint16_t>(src[1]) << 8U));
+  return static_cast<uint16_t>(static_cast<uint16_t>(src[0]) | (static_cast<uint16_t>(src[1]) << 8U));
 }
 
 uint32_t read_u32_le(const uint8_t* src) noexcept {
-  return static_cast<uint32_t>(src[0]) |
-         (static_cast<uint32_t>(src[1]) << 8U) |
-         (static_cast<uint32_t>(src[2]) << 16U) |
+  return static_cast<uint32_t>(src[0]) | (static_cast<uint32_t>(src[1]) << 8U) | (static_cast<uint32_t>(src[2]) << 16U) |
          (static_cast<uint32_t>(src[3]) << 24U);
 }
 
@@ -87,9 +84,7 @@ bool is_valid_axis_config(const AxisConfig& axis) noexcept {
   if (axis.curve.type != CurveType::Linear && axis.curve.type != CurveType::Expo) {
     return false;
   }
-  if (!std::isfinite(axis.curve.param) ||
-      axis.curve.param < 0.0f ||
-      axis.curve.param > 1.0f) {
+  if (!std::isfinite(axis.curve.param) || axis.curve.param < 0.0f || axis.curve.param > 1.0f) {
     return false;
   }
   return true;
@@ -104,8 +99,7 @@ bool is_valid_stick_config(const StickInputConfig& cfg) noexcept {
   return true;
 }
 
-bool encode_stick_config(const StickInputConfig& cfg,
-                         PersistedConfigBlob& out) noexcept {
+bool encode_stick_config(const StickInputConfig& cfg, PersistedConfigBlob& out) noexcept {
   if (!is_valid_stick_config(cfg)) {
     return false;
   }
@@ -127,8 +121,7 @@ bool encode_stick_config(const StickInputConfig& cfg,
     write_i32_le(&rec[8], axis.calibration.max);
     write_f32_le(&rec[12], axis.deadzone);
     rec[16] = static_cast<uint8_t>(axis.curve.type);
-    rec[17] = static_cast<uint8_t>(
-        (axis.enabled ? kFlagEnabled : 0U) | (axis.invert ? kFlagInvert : 0U));
+    rec[17] = static_cast<uint8_t>((axis.enabled ? kFlagEnabled : 0U) | (axis.invert ? kFlagInvert : 0U));
     write_u16_le(&rec[18], 0U);
     write_f32_le(&rec[20], axis.curve.param);
   }
@@ -138,17 +131,12 @@ bool encode_stick_config(const StickInputConfig& cfg,
   return true;
 }
 
-ConfigDecodeResult decode_stick_config(const uint8_t* data,
-                                       size_t len,
-                                       StickInputConfig& out) noexcept {
+ConfigDecodeResult decode_stick_config(const uint8_t* data, size_t len, StickInputConfig& out) noexcept {
   if (data == nullptr || len != kPersistedConfigBytes) {
     return ConfigDecodeResult::InvalidLength;
   }
 
-  if (data[0] != kConfigStorageMagic0 ||
-      data[1] != kConfigStorageMagic1 ||
-      data[2] != kConfigStorageMagic2 ||
-      data[3] != kConfigStorageMagic3) {
+  if (data[0] != kConfigStorageMagic0 || data[1] != kConfigStorageMagic1 || data[2] != kConfigStorageMagic2 || data[3] != kConfigStorageMagic3) {
     return ConfigDecodeResult::BadMagic;
   }
 

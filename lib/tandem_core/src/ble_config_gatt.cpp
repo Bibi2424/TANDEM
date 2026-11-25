@@ -10,10 +10,7 @@ void BleLineAssembler::reset() noexcept {
   buf_[0] = '\0';
 }
 
-BleLineAssembler::FeedResult BleLineAssembler::push_byte(
-    uint8_t byte,
-    char* line_out,
-    size_t line_out_size) noexcept {
+BleLineAssembler::FeedResult BleLineAssembler::push_byte(uint8_t byte, char* line_out, size_t line_out_size) noexcept {
   const char ch = static_cast<char>(byte);
 
   if (ch == '\r') {

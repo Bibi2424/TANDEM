@@ -1,5 +1,6 @@
-#include <cstdint>
 #include <unity.h>
+
+#include <cstdint>
 
 #include "tandem/core_info.h"
 #include "tandem/types.h"

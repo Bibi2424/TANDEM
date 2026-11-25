@@ -38,12 +38,9 @@ struct StickCombineConfig {
   HatMergePolicy hat_policy{HatMergePolicy::LeftThenRight};
 };
 
-static_assert(std::is_trivially_copyable_v<AxisSource>,
-              "AxisSource must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<ButtonSource>,
-              "ButtonSource must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<StickCombineConfig>,
-              "StickCombineConfig must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<AxisSource>, "AxisSource must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<ButtonSource>, "ButtonSource must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<StickCombineConfig>, "StickCombineConfig must be trivially copyable");
 
 /// Builds the default HOSAS combined routing:
 /// - Axes 0..3 <- Left 0..3, Axes 4..7 <- Right 0..3
@@ -65,9 +62,6 @@ constexpr StickCombineConfig make_default_combine_config() noexcept {
 
 /// Merges post-failsafe `left` and `right` StickStates using `config`.
 /// Clamps axes to [kAxisMin, kAxisMax], sanitizes hat > 8 to kHatCentered, and zeroes reserved.
-StickState combine_sticks(
-    const StickState& left,
-    const StickState& right,
-    const StickCombineConfig& config = make_default_combine_config()) noexcept;
+StickState combine_sticks(const StickState& left, const StickState& right, const StickCombineConfig& config = make_default_combine_config()) noexcept;
 
 }  // namespace tandem

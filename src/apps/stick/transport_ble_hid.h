@@ -19,12 +19,9 @@ class BleHidTransport final : public StickTransport {
   void stop() noexcept override;
   void poll() noexcept override;
   void fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept override;
-  bool send(tandem::StickId stick_id,
-            const tandem::StickState& state) noexcept override;
+  bool send(tandem::StickId stick_id, const tandem::StickState& state) noexcept override;
   void format_stats(char* out, size_t out_len) const noexcept override;
-  const char* device_name() const noexcept override {
-    return (device_name_[0] != '\0') ? device_name_ : nullptr;
-  }
+  const char* device_name() const noexcept override { return (device_name_[0] != '\0') ? device_name_ : nullptr; }
 
   bool connected() const noexcept;
 

@@ -29,8 +29,7 @@ void on_espnow_send(const esp_now_send_info_t*, esp_now_send_status_t status) {
 
 }  // namespace
 
-void EspNowTxTransport::configure(uint8_t channel,
-                                  const uint8_t peer_mac[6]) noexcept {
+void EspNowTxTransport::configure(uint8_t channel, const uint8_t peer_mac[6]) noexcept {
   channel_ = channel;
   std::memcpy(peer_mac_, peer_mac, sizeof(peer_mac_));
 }
@@ -84,14 +83,12 @@ void EspNowTxTransport::stop() noexcept {
   active_ = false;
 }
 
-bool EspNowTxTransport::send(tandem::StickId stick_id,
-                             const tandem::StickState& state) noexcept {
+bool EspNowTxTransport::send(tandem::StickId stick_id, const tandem::StickState& state) noexcept {
   if (!active_) {
     return false;
   }
   tandem::EspNowPacketBuffer pkt{};
-  if (!tandem::encode_espnow_packet(
-          stick_id, seq_, state, pkt.bytes, sizeof(pkt.bytes))) {
+  if (!tandem::encode_espnow_packet(stick_id, seq_, state, pkt.bytes, sizeof(pkt.bytes))) {
     return false;
   }
   ++seq_;
@@ -105,8 +102,7 @@ bool EspNowTxTransport::send(tandem::StickId stick_id,
 
 void EspNowTxTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) const noexcept {
   out.has_dropped = true;
-  out.dropped_packets =
-      tx_errors_ + g_ack_fail.load(std::memory_order_relaxed);
+  out.dropped_packets = tx_errors_ + g_ack_fail.load(std::memory_order_relaxed);
   out.has_peer_status = true;
   bool is_broadcast = true;
   for (uint8_t b : peer_mac_) {
@@ -119,12 +115,8 @@ void EspNowTxTransport::fill_telemetry(tandem::config::TelemetrySnapshot& out) c
 }
 
 void EspNowTxTransport::format_stats(char* out, size_t out_len) const noexcept {
-  std::snprintf(out,
-                out_len,
-                "tx=%lu err=%lu ack_ok=%lu ack_fail=%lu",
-                static_cast<unsigned long>(tx_queued_),
-                static_cast<unsigned long>(tx_errors_),
-                static_cast<unsigned long>(g_ack_ok.load(std::memory_order_relaxed)),
+  std::snprintf(out, out_len, "tx=%lu err=%lu ack_ok=%lu ack_fail=%lu", static_cast<unsigned long>(tx_queued_),
+                static_cast<unsigned long>(tx_errors_), static_cast<unsigned long>(g_ack_ok.load(std::memory_order_relaxed)),
                 static_cast<unsigned long>(g_ack_fail.load(std::memory_order_relaxed)));
 }
 

@@ -1,6 +1,7 @@
+#include <unity.h>
+
 #include <cstdint>
 #include <cstring>
-#include <unity.h>
 
 #include "tandem/device_name.h"
 

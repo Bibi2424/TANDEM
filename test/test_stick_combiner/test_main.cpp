@@ -1,5 +1,6 @@
-#include <cstdint>
 #include <unity.h>
+
+#include <cstdint>
 
 #include "tandem/stick_combiner.h"
 
@@ -45,16 +46,16 @@ void test_default_combine_config_hosas_mapping() {
 
 void test_custom_any_to_any_axis_and_button_remapping() {
   tandem::StickState joy1 = tandem::make_centered_state(tandem::kStateFlagConnected);
-  joy1.axes[0] = 111;   // 1.X
-  joy1.axes[1] = 222;   // 1.Y
-  joy1.axes[2] = 333;   // 1.Z
+  joy1.axes[0] = 111;                  // 1.X
+  joy1.axes[1] = 222;                  // 1.Y
+  joy1.axes[2] = 333;                  // 1.Z
   joy1.buttons = (uint32_t{1} << 20);  // Button 20 on Stick 1
 
   tandem::StickState joy2 = tandem::make_centered_state(tandem::kStateFlagConnected);
-  joy2.axes[0] = -444;  // 2.X
-  joy2.axes[1] = -555;  // 2.Y
-  joy2.axes[2] = -666;  // 2.Z
-  joy2.buttons = (uint32_t{1} << 0);   // Button 0 on Stick 2
+  joy2.axes[0] = -444;                // 2.X
+  joy2.axes[1] = -555;                // 2.Y
+  joy2.axes[2] = -666;                // 2.Z
+  joy2.buttons = (uint32_t{1} << 0);  // Button 0 on Stick 2
 
   // Remap: 1.X->Y(1), 1.Y->Z(2), 1.Z->Rx(3), 2.X->X(0), 2.Y->Rz(5), 2.Z->Ry(4)
   // Slots 6 (Slider) & 7 (Dial) left unmapped (Unknown -> 0).
@@ -100,8 +101,7 @@ void test_single_stick_failsafe_isolation() {
   TEST_ASSERT_EQUAL_INT16(-15000, combined.axes[5]);
   TEST_ASSERT_EQUAL_HEX32(0x000F0000U, combined.buttons);
   TEST_ASSERT_EQUAL_UINT8(5U, combined.hat);
-  TEST_ASSERT_EQUAL_UINT8(tandem::kStateFlagConnected | tandem::kStateFlagFailsafe,
-                          combined.flags);
+  TEST_ASSERT_EQUAL_UINT8(tandem::kStateFlagConnected | tandem::kStateFlagFailsafe, combined.flags);
 }
 
 void test_hat_merge_policies_and_sanitization() {
@@ -143,10 +143,10 @@ void test_out_of_range_indices_and_int16_min_clamping() {
   tandem::StickCombineConfig cfg{};
   cfg.axis_map[0] = {tandem::StickId::Left, 0};
   cfg.axis_map[1] = {tandem::StickId::Right, 0};
-  cfg.axis_map[2] = {tandem::StickId::Left, 8};    // Out of range -> 0
-  cfg.axis_map[3] = {tandem::StickId::Right, 99};  // Out of range -> 0
-  cfg.button_map[0] = {tandem::StickId::Left, 32}; // Out of range -> 0
-  cfg.button_map[1] = {tandem::StickId::Left, 0};  // Valid -> 1
+  cfg.axis_map[2] = {tandem::StickId::Left, 8};     // Out of range -> 0
+  cfg.axis_map[3] = {tandem::StickId::Right, 99};   // Out of range -> 0
+  cfg.button_map[0] = {tandem::StickId::Left, 32};  // Out of range -> 0
+  cfg.button_map[1] = {tandem::StickId::Left, 0};   // Valid -> 1
 
   const tandem::StickState combined = tandem::combine_sticks(left, right, cfg);
   TEST_ASSERT_EQUAL_INT16(tandem::kAxisMin, combined.axes[0]);

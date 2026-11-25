@@ -4,12 +4,9 @@
 
 namespace tandem::hal {
 
-HidConfigEndpoint::HidConfigEndpoint(size_t report_bytes) noexcept
-    : tx_queue_(report_bytes) {}
+HidConfigEndpoint::HidConfigEndpoint(size_t report_bytes) noexcept : tx_queue_(report_bytes) {}
 
-void HidConfigEndpoint::enqueue_command_locked(const char* line,
-                                               uint8_t seq,
-                                               bool overflow) noexcept {
+void HidConfigEndpoint::enqueue_command_locked(const char* line, uint8_t seq, bool overflow) noexcept {
   if (cmd_count_ >= kCommandQueueDepth) {
     return;
   }
@@ -44,10 +41,7 @@ void HidConfigEndpoint::on_rx_chunk(const uint8_t* data, size_t len) noexcept {
   portEXIT_CRITICAL(&rx_mux_);
 }
 
-bool HidConfigEndpoint::pop_command(char* out,
-                                    size_t out_size,
-                                    uint8_t& seq_out,
-                                    bool& overflow_out) noexcept {
+bool HidConfigEndpoint::pop_command(char* out, size_t out_size, uint8_t& seq_out, bool& overflow_out) noexcept {
   if (out == nullptr || out_size == 0U) {
     return false;
   }
@@ -71,9 +65,7 @@ bool HidConfigEndpoint::pop_command(char* out,
   return has_item;
 }
 
-bool HidConfigEndpoint::enqueue_response(uint8_t seq,
-                                         const char* data,
-                                         size_t len) noexcept {
+bool HidConfigEndpoint::enqueue_response(uint8_t seq, const char* data, size_t len) noexcept {
   return tx_queue_.enqueue_response(seq, data, len);
 }
 
@@ -81,10 +73,7 @@ bool HidConfigEndpoint::enqueue_live(const char* data, size_t len) noexcept {
   return tx_queue_.enqueue_live(data, len);
 }
 
-bool HidConfigEndpoint::poll_tx(uint32_t now_ms,
-                                SendChunkFn send_fn,
-                                void* ctx,
-                                bool& stalled_out) noexcept {
+bool HidConfigEndpoint::poll_tx(uint32_t now_ms, SendChunkFn send_fn, void* ctx, bool& stalled_out) noexcept {
   stalled_out = false;
   if (!tx_queue_.has_pending()) {
     tx_pending_since_valid_ = false;
@@ -97,8 +86,7 @@ bool HidConfigEndpoint::poll_tx(uint32_t now_ms,
 
   const uint8_t* chunk = nullptr;
   size_t len = 0U;
-  if (send_fn != nullptr && tx_queue_.peek_chunk(chunk, len) &&
-      send_fn(ctx, chunk, len)) {
+  if (send_fn != nullptr && tx_queue_.peek_chunk(chunk, len) && send_fn(ctx, chunk, len)) {
     tx_queue_.consume_chunk();
     tx_pending_since_ms_ = now_ms;
     if (!tx_queue_.has_pending()) {
@@ -107,8 +95,7 @@ bool HidConfigEndpoint::poll_tx(uint32_t now_ms,
     return true;
   }
 
-  if (static_cast<uint32_t>(now_ms - tx_pending_since_ms_) >=
-      kTxStallTimeoutMs) {
+  if (static_cast<uint32_t>(now_ms - tx_pending_since_ms_) >= kTxStallTimeoutMs) {
     tx_queue_.reset();
     tx_pending_since_valid_ = false;
     stalled_out = true;

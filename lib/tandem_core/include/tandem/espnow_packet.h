@@ -26,8 +26,7 @@ struct EspNowPacketBuffer {
   uint8_t bytes[kEspNowPacketBytes]{};
 };
 
-static_assert(sizeof(EspNowPacketBuffer) == kEspNowPacketBytes,
-              "EspNowPacketBuffer must be exactly 30 bytes");
+static_assert(sizeof(EspNowPacketBuffer) == kEspNowPacketBytes, "EspNowPacketBuffer must be exactly 30 bytes");
 
 enum class PacketDecodeResult : uint8_t {
   Ok = 0,
@@ -49,16 +48,10 @@ uint16_t crc16_ccitt_false(const uint8_t* data, size_t len) noexcept;
 
 /// Encodes `stick_id`, `seq`, and `state` into a 30-byte little-endian ESP-NOW packet.
 /// Returns false if `out` is null, `out_len < kEspNowPacketBytes`, or `stick_id` is not Left/Right.
-bool encode_espnow_packet(StickId stick_id,
-                          uint16_t seq,
-                          const StickState& state,
-                          uint8_t* out,
-                          size_t out_len) noexcept;
+bool encode_espnow_packet(StickId stick_id, uint16_t seq, const StickState& state, uint8_t* out, size_t out_len) noexcept;
 
 /// Validates and decodes a 30-byte ESP-NOW packet into `out`, sanitizing axes and hat.
-PacketDecodeResult decode_espnow_packet(const uint8_t* data,
-                                        size_t len,
-                                        DecodedEspNowPacket& out) noexcept;
+PacketDecodeResult decode_espnow_packet(const uint8_t* data, size_t len, DecodedEspNowPacket& out) noexcept;
 
 /// Wraparound-safe uint16_t sequence delta (`next_seq - prev_seq`).
 constexpr uint16_t espnow_seq_delta(uint16_t prev_seq, uint16_t next_seq) noexcept {

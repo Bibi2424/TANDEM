@@ -14,9 +14,7 @@ void tearDown() {}
 
 namespace {
 
-void verify_descriptor(const HidConfigReportDescriptor& desc,
-                       uint8_t expected_id,
-                       uint8_t expected_bytes) {
+void verify_descriptor(const HidConfigReportDescriptor& desc, uint8_t expected_id, uint8_t expected_bytes) {
   TEST_ASSERT_EQUAL_UINT32(36U, sizeof(desc.bytes));
   // Usage Page (0xFF54 LE)
   TEST_ASSERT_EQUAL_HEX8(0x06U, desc.bytes[0]);
@@ -50,17 +48,9 @@ void verify_descriptor(const HidConfigReportDescriptor& desc,
   TEST_ASSERT_EQUAL_HEX8(0xC0U, desc.bytes[35]);
 }
 
-void round_trip_message(HidConfigMsgType type,
-                        uint8_t seq,
-                        const std::string& payload,
-                        size_t report_bytes) {
+void round_trip_message(HidConfigMsgType type, uint8_t seq, const std::string& payload, size_t report_bytes) {
   HidConfigChunkEncoder encoder;
-  TEST_ASSERT_TRUE(encoder.begin(
-      type,
-      seq,
-      reinterpret_cast<const uint8_t*>(payload.data()),
-      payload.size(),
-      report_bytes));
+  TEST_ASSERT_TRUE(encoder.begin(type, seq, reinterpret_cast<const uint8_t*>(payload.data()), payload.size(), report_bytes));
 
   FixedHidConfigReassembler<kMaxResponseLength> reassembler;
   HidConfigMessageView view{};
@@ -73,9 +63,7 @@ void round_trip_message(HidConfigMsgType type,
     ++chunks;
 
     const uint8_t payload_len = chunk[5];
-    for (size_t pad = kHidConfigChunkOverheadBytes + payload_len;
-         pad < report_bytes;
-         ++pad) {
+    for (size_t pad = kHidConfigChunkOverheadBytes + payload_len; pad < report_bytes; ++pad) {
       TEST_ASSERT_EQUAL_HEX8(0x00U, chunk[pad]);
     }
 
@@ -90,21 +78,16 @@ void round_trip_message(HidConfigMsgType type,
   TEST_ASSERT_GREATER_THAN_UINT32(0U, static_cast<uint32_t>(chunks));
   TEST_ASSERT_EQUAL(type, view.type);
   TEST_ASSERT_EQUAL_UINT8(seq, view.seq);
-  TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(payload.size()),
-                           static_cast<uint32_t>(view.len));
+  TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(payload.size()), static_cast<uint32_t>(view.len));
   TEST_ASSERT_EQUAL_STRING(payload.c_str(), view.data);
 }
 
 }  // namespace
 
 void test_descriptor_builder_usb_and_ble() {
-  verify_descriptor(kHidConfigUsbReportDescriptor,
-                    kHidReportIdConfigUsb,
-                    static_cast<uint8_t>(kHidConfigUsbReportBytes));
-  const auto ble_desc = make_hid_config_report_descriptor(
-      2U, static_cast<uint8_t>(kHidConfigBleReportBytes));
-  verify_descriptor(
-      ble_desc, 2U, static_cast<uint8_t>(kHidConfigBleReportBytes));
+  verify_descriptor(kHidConfigUsbReportDescriptor, kHidReportIdConfigUsb, static_cast<uint8_t>(kHidConfigUsbReportBytes));
+  const auto ble_desc = make_hid_config_report_descriptor(2U, static_cast<uint8_t>(kHidConfigBleReportBytes));
+  verify_descriptor(ble_desc, 2U, static_cast<uint8_t>(kHidConfigBleReportBytes));
 }
 
 void test_round_trip_single_zero_and_multichunk_usb_and_ble() {
@@ -151,12 +134,8 @@ void test_reassembler_error_paths_and_recovery() {
 
   // Prepare a multi-chunk 120-byte payload (>63-8=55 max payload per USB chunk).
   std::string long_msg(120U, 'A');
-  TEST_ASSERT_TRUE(enc.begin(
-      HidConfigMsgType::Command,
-      5U,
-      reinterpret_cast<const uint8_t*>(long_msg.data()),
-      long_msg.size(),
-      kHidConfigUsbReportBytes));
+  TEST_ASSERT_TRUE(
+      enc.begin(HidConfigMsgType::Command, 5U, reinterpret_cast<const uint8_t*>(long_msg.data()), long_msg.size(), kHidConfigUsbReportBytes));
   std::vector<std::vector<uint8_t>> chunks;
   while (enc.has_next()) {
     std::vector<uint8_t> c(kHidConfigUsbReportBytes);
@@ -166,88 +145,67 @@ void test_reassembler_error_paths_and_recovery() {
   TEST_ASSERT_EQUAL_UINT32(3U, static_cast<uint32_t>(chunks.size()));
 
   // Null or too short
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk,
-                    reassembler.push_chunk(nullptr, kHidConfigUsbReportBytes, view));
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk,
-                    reassembler.push_chunk(chunk, kHidConfigChunkOverheadBytes - 1U, view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk, reassembler.push_chunk(nullptr, kHidConfigUsbReportBytes, view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk, reassembler.push_chunk(chunk, kHidConfigChunkOverheadBytes - 1U, view));
 
   // Bad magic
   std::memcpy(chunk, chunks[0].data(), kHidConfigUsbReportBytes);
   chunk[0] = 0x00U;
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk, reassembler.push_chunk(chunk, sizeof(chunk), view));
 
   // Unsupported version
   std::memcpy(chunk, chunks[0].data(), kHidConfigUsbReportBytes);
   chunk[1] = 2U;
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::UnsupportedVersion,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::UnsupportedVersion, reassembler.push_chunk(chunk, sizeof(chunk), view));
 
   // Reserved flags bit set
   std::memcpy(chunk, chunks[0].data(), kHidConfigUsbReportBytes);
   chunk[2] |= 0x40U;
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk, reassembler.push_chunk(chunk, sizeof(chunk), view));
 
   // Invalid msg type (0)
   std::memcpy(chunk, chunks[0].data(), kHidConfigUsbReportBytes);
   chunk[2] = kHidConfigFlagStart;
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk, reassembler.push_chunk(chunk, sizeof(chunk), view));
 
   // payload_len out of bounds
   std::memcpy(chunk, chunks[0].data(), kHidConfigUsbReportBytes);
   chunk[5] = static_cast<uint8_t>(kHidConfigUsbReportBytes);
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::InvalidChunk, reassembler.push_chunk(chunk, sizeof(chunk), view));
 
   // 1-bit CRC corruption in header & payload
   std::memcpy(chunk, chunks[0].data(), kHidConfigUsbReportBytes);
   chunk[3] ^= 0x01U;
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::BadCrc,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::BadCrc, reassembler.push_chunk(chunk, sizeof(chunk), view));
   std::memcpy(chunk, chunks[0].data(), kHidConfigUsbReportBytes);
   chunk[kHidConfigHeaderBytes] ^= 0x01U;
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::BadCrc,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::BadCrc, reassembler.push_chunk(chunk, sizeof(chunk), view));
 
   // Start flag with non-zero chunk_idx (valid CRC) -> SequenceError
   std::memcpy(chunk, chunks[1].data(), kHidConfigUsbReportBytes);
   chunk[2] |= kHidConfigFlagStart;
-  const uint16_t start_bad_idx_crc =
-      tandem::crc16_ccitt_false(chunk, kHidConfigHeaderBytes + chunk[5]);
+  const uint16_t start_bad_idx_crc = tandem::crc16_ccitt_false(chunk, kHidConfigHeaderBytes + chunk[5]);
   chunk[kHidConfigHeaderBytes + chunk[5]] = static_cast<uint8_t>(start_bad_idx_crc & 0xFFU);
   chunk[kHidConfigHeaderBytes + chunk[5] + 1U] = static_cast<uint8_t>((start_bad_idx_crc >> 8U) & 0xFFU);
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::SequenceError,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::SequenceError, reassembler.push_chunk(chunk, sizeof(chunk), view));
 
   // Continuation chunk without active message -> SequenceError
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::SequenceError,
-                    reassembler.push_chunk(chunks[1].data(), chunks[1].size(), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::SequenceError, reassembler.push_chunk(chunks[1].data(), chunks[1].size(), view));
 
   // Missing middle chunk: chunk 0 then chunk 2 -> SequenceError
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::Incomplete,
-                    reassembler.push_chunk(chunks[0].data(), chunks[0].size(), view));
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::SequenceError,
-                    reassembler.push_chunk(chunks[2].data(), chunks[2].size(), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::Incomplete, reassembler.push_chunk(chunks[0].data(), chunks[0].size(), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::SequenceError, reassembler.push_chunk(chunks[2].data(), chunks[2].size(), view));
 
   // Overflow: capacity is 64 (max 63 chars), chunk 0 (55) + chunk 1 (55) = 110 > 63
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::Incomplete,
-                    reassembler.push_chunk(chunks[0].data(), chunks[0].size(), view));
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::Overflow,
-                    reassembler.push_chunk(chunks[1].data(), chunks[1].size(), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::Incomplete, reassembler.push_chunk(chunks[0].data(), chunks[0].size(), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::Overflow, reassembler.push_chunk(chunks[1].data(), chunks[1].size(), view));
 
   // Clean recovery on next valid Start chunk
   const std::string ok_cmd = "$TANDEM get\n";
-  TEST_ASSERT_TRUE(enc.begin(
-      HidConfigMsgType::Command,
-      11U,
-      reinterpret_cast<const uint8_t*>(ok_cmd.data()),
-      ok_cmd.size(),
-      kHidConfigUsbReportBytes));
+  TEST_ASSERT_TRUE(
+      enc.begin(HidConfigMsgType::Command, 11U, reinterpret_cast<const uint8_t*>(ok_cmd.data()), ok_cmd.size(), kHidConfigUsbReportBytes));
   TEST_ASSERT_TRUE(enc.next_chunk(chunk, sizeof(chunk)));
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady,
-                    reassembler.push_chunk(chunk, sizeof(chunk), view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady, reassembler.push_chunk(chunk, sizeof(chunk), view));
   TEST_ASSERT_EQUAL_UINT8(11U, view.seq);
   TEST_ASSERT_EQUAL_STRING(ok_cmd.c_str(), view.data);
 }
@@ -285,8 +243,7 @@ void test_tx_queue_priority_retries_and_ble_sizing() {
   HidConfigMessageView view{};
 
   // Consume resp1 (now active), then resp2, then live2.
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady,
-                    rx.push_chunk(ptr1, len1, view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady, rx.push_chunk(ptr1, len1, view));
   TEST_ASSERT_EQUAL(HidConfigMsgType::Response, view.type);
   TEST_ASSERT_EQUAL_UINT8(17U, view.seq);
   TEST_ASSERT_EQUAL_STRING(resp1.c_str(), view.data);
@@ -294,8 +251,7 @@ void test_tx_queue_priority_retries_and_ble_sizing() {
 
   // Next must be resp2 before coalesced live2.
   TEST_ASSERT_TRUE(tx.peek_chunk(ptr1, len1));
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady,
-                    rx.push_chunk(ptr1, len1, view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady, rx.push_chunk(ptr1, len1, view));
   TEST_ASSERT_EQUAL(HidConfigMsgType::Response, view.type);
   TEST_ASSERT_EQUAL_UINT8(18U, view.seq);
   TEST_ASSERT_EQUAL_STRING(resp2.c_str(), view.data);
@@ -303,8 +259,7 @@ void test_tx_queue_priority_retries_and_ble_sizing() {
 
   // Finally coalesced live2.
   TEST_ASSERT_TRUE(tx.peek_chunk(ptr1, len1));
-  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady,
-                    rx.push_chunk(ptr1, len1, view));
+  TEST_ASSERT_EQUAL(HidConfigReassembler::FeedResult::MessageReady, rx.push_chunk(ptr1, len1, view));
   TEST_ASSERT_EQUAL(HidConfigMsgType::Live, view.type);
   TEST_ASSERT_EQUAL_STRING(live2.c_str(), view.data);
   tx.consume_chunk();

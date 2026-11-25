@@ -7,7 +7,7 @@
 namespace tandem {
 struct RawStickInput;
 struct StickInputConfig;
-}
+}  // namespace tandem
 
 namespace tandem::hal {
 
@@ -21,9 +21,8 @@ struct InputScannerConfig {
   uint8_t adc_oversample{4};
 
   // Active-low (INPUT_PULLUP) GPIO numbers per button bit; -1 disables the slot.
-  int8_t button_pins[kMaxButtons]{
-      -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-      -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+  int8_t button_pins[kMaxButtons]{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
   // Optional 4-pin active-low directional hat {N, E, S, W}; -1 disables a direction.
   int8_t hat_pins[kHatPinCount]{-1, -1, -1, -1};
@@ -58,7 +57,6 @@ class InputScanner {
 /// Builds a default StickInputConfig for all active axis pins in `scanner_cfg`,
 /// using full-scale ADC range [0 .. (1 << adc_bits) - 1], midpoint center,
 /// linear curve, and sanitized deadzone (clamped to [0.0f, 0.99f]).
-tandem::StickInputConfig make_default_input_config(
-    const InputScannerConfig& scanner_cfg, float deadzone = 0.05f) noexcept;
+tandem::StickInputConfig make_default_input_config(const InputScannerConfig& scanner_cfg, float deadzone = 0.05f) noexcept;
 
 }  // namespace tandem::hal

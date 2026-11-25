@@ -32,18 +32,14 @@ float calibrate_axis(int32_t raw, const AxisCalibration& calibration) noexcept {
   }
 
   // Use 64-bit spans so extreme int32_t bounds cannot overflow signed 32-bit subtraction.
-  const int64_t delta =
-      static_cast<int64_t>(raw) - static_cast<int64_t>(calibration.center);
+  const int64_t delta = static_cast<int64_t>(raw) - static_cast<int64_t>(calibration.center);
   if (delta > 0) {
-    const int64_t pos_span =
-        static_cast<int64_t>(calibration.max) - static_cast<int64_t>(calibration.center);
+    const int64_t pos_span = static_cast<int64_t>(calibration.max) - static_cast<int64_t>(calibration.center);
     return clamp_unit(static_cast<float>(delta) / static_cast<float>(pos_span));
   }
 
-  const int64_t neg_span =
-      static_cast<int64_t>(calibration.center) - static_cast<int64_t>(calibration.min);
-  const float magnitude =
-      clamp_unit(static_cast<float>(-delta) / static_cast<float>(neg_span));
+  const int64_t neg_span = static_cast<int64_t>(calibration.center) - static_cast<int64_t>(calibration.min);
+  const float magnitude = clamp_unit(static_cast<float>(-delta) / static_cast<float>(neg_span));
   return (magnitude <= 0.0f) ? 0.0f : -magnitude;
 }
 
