@@ -52,7 +52,7 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          junit_files: "test-results/**/*.xml"
+          files: "test-results/**/*.xml"
           check_name: "Native Unit Test Results"
           comment_mode: "off"
           job_summary: "true"
