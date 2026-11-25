@@ -51,7 +51,7 @@
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `tools/configurator/` — Static zero-build WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
   - `tools/git_version.py` — PlatformIO `pre:` script injecting `TANDEM_GIT_COMMIT` for firmware identity reporting.
-  - `tools/format_coverage_summary.py` — Formats `gcovr --json-summary` output into a Markdown table for GitHub Actions step summaries.
+  - `tools/format_coverage_summary.py` — Renders JUnit XML, `gcovr --json`, and PR diff coverage into a Markdown report for GitHub Actions step summaries and sticky PR comments.
   - `test/` — Native host Unity unit tests (`test/test_core/`, `test/test_axis_shaping/`, `test/test_ble_config_gatt/`, `test/test_config_protocol/`, `test/test_config_storage/`, `test/test_device_name/`, `test/test_input_pipeline/`, `test/test_hid_report/`, `test/test_failsafe/`, `test/test_espnow_packet/`, `test/test_stick_combiner/`, `test/test_synthetic_input/`).
 - **Defined environments & commands:**
   - Native unit tests: `pio test -e native`
@@ -60,7 +60,7 @@
   - USB Base Station (`ESP32-S2` / `ESP32-S3`, Dual or Combined USB HID + failsafe): `pio run -e esp32_s2_base_station` (Dual) / `esp32_s2_base_station_combined` (Combined), `pio run -e esp32_s3_base_station`
   - Serial console: `pio device monitor -b 115200` (add `-p <PORT>` if multiple boards are connected; on ESP32-S2 native USB CDC, press `RST` after attaching if you want to see the boot banner)
   - All default firmware targets: `pio run`
-- **CI & Pages:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` (publishing JUnit XML results), `pio test -e native_cov` (publishing `lib/tandem_core/` `gcovr` line/branch coverage to the step summary and HTML report artifact), and `pio run` on pushes to `main` and pull requests; [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
+- **CI & Pages:** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs `pio test -e native -v` (publishing JUnit XML results via `dorny/test-reporter`), `pio test -e native_cov` (publishing `lib/tandem_core/` `gcovr` + PR diff coverage to the step summary, a sticky same-repo PR comment, and an HTML report artifact), and `pio run` on pushes to `main` and pull requests; [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
 
 ---
 

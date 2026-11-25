@@ -21,9 +21,12 @@ jobs:
     permissions:
       contents: read
       checks: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,13 +52,14 @@ jobs:
           pio test -e native -v --junit-output-path test-results/junit.xml
 
       - name: Publish unit test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
         with:
-          files: "test-results/**/*.xml"
-          check_name: "Native Unit Test Results"
-          comment_mode: "off"
-          job_summary: "true"
+          name: Native Unit Test Results
+          path: "test-results/**/*.xml"
+          reporter: java-junit
+          list-tests: all
+          fail-on-error: "false"
 
       - name: Run native coverage tests
         run: |
@@ -68,9 +72,43 @@ jobs:
           gcovr --root . --filter lib/tandem_core/ \
             --exclude-unreachable-branches --exclude-throw-branches \
             --txt \
-            --json-summary coverage/summary.json \
+            --json coverage/coverage.json \
             --html-details coverage/index.html
-          python tools/format_coverage_summary.py coverage/summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build CI summary report
+        if: success() || failure()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          ARGS=(--run-url "$RUN_URL" --marker "<!-- tandem-ci-report -->" --output test-results/ci-report.md)
+          if [ -f test-results/junit.xml ]; then
+            ARGS+=(--junit-xml test-results/junit.xml)
+          fi
+          if [ -f coverage/coverage.json ]; then
+            ARGS+=(--coverage-json coverage/coverage.json)
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$BASE_SHA" ]; then
+            ARGS+=(--base-ref "$BASE_SHA")
+          fi
+          python tools/format_coverage_summary.py "${ARGS[@]}"
+          cat test-results/ci-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post or update sticky PR comment
+        if: (success() || failure()) && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          COMMENT_ID=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" \
+            --jq '.[] | select(.body | contains("<!-- tandem-ci-report -->")) | .id' | head -n 1)
+          if [ -n "$COMMENT_ID" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${COMMENT_ID}" -F body=@test-results/ci-report.md >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -F body=@test-results/ci-report.md >/dev/null
+          fi
 
       - name: Upload HTML coverage report
         uses: actions/upload-artifact@v4
