@@ -24,6 +24,42 @@ enum class StickId : uint8_t {
   Right = 2,
 };
 
+enum class StickTransportMode : uint8_t {
+  UsbHid = 0,
+  BleHid = 1,
+  EspNowTx = 2,
+  BleConfig = 3,
+};
+
+enum class BaseOutputMode : uint8_t {
+  Dual = 0,
+  Combined = 1,
+};
+
+constexpr const char* stick_transport_mode_name(StickTransportMode mode) noexcept {
+  switch (mode) {
+    case StickTransportMode::UsbHid:
+      return "USB_HID";
+    case StickTransportMode::BleHid:
+      return "BLE_HID";
+    case StickTransportMode::EspNowTx:
+      return "ESPNOW_TX";
+    case StickTransportMode::BleConfig:
+      return "BLE_CFG";
+  }
+  return "UNKNOWN";
+}
+
+constexpr const char* base_output_mode_name(BaseOutputMode mode) noexcept {
+  switch (mode) {
+    case BaseOutputMode::Dual:
+      return "ESPNOW_RX_DUAL";
+    case BaseOutputMode::Combined:
+      return "ESPNOW_RX_COMBINED";
+  }
+  return "UNKNOWN";
+}
+
 enum StateFlag : uint8_t {
   kStateFlagNone = 0x00,
   kStateFlagConnected = 0x01,

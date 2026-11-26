@@ -20,11 +20,14 @@ USBCDC g_usb_serial;
 
 #include "boards/board_config.h"
 #include "tandem/config_protocol.h"
+#include "tandem/config_storage.h"
 #include "tandem/core_info.h"
 #include "tandem/espnow_packet.h"
 #include "tandem/failsafe.h"
 #include "tandem/stick_combiner.h"
 #include "tandem/types.h"
+#include "tandem_hal/boot_button.h"
+#include "tandem_hal/config_nvs.h"
 #include "usb_hid_bridge.h"
 
 static_assert(tandem::board::kHasNativeUsb, "base_station requires native USB support");
@@ -48,6 +51,8 @@ constexpr uint32_t kLiveStreamIntervalMs = 33;
 constexpr uint32_t kLedConnectedIntervalMs = 250;
 constexpr uint32_t kLedIdleIntervalMs = 1000;
 constexpr uint32_t kUsbSerialWaitMs = 1500;
+constexpr uint32_t kRebootGraceMs = 200;
+constexpr uint32_t kRebootMaxWaitMs = 1000;
 
 struct RxStickSnapshot {
   tandem::StickState state{tandem::make_centered_state(tandem::kStateFlagFailsafe)};
@@ -87,6 +92,8 @@ void on_espnow_recv(const esp_now_recv_info_t* esp_now_info, const uint8_t* data
 
 tandem::FailsafeMonitor g_monitors[2]{};
 tandem::StickCombineConfig g_combine_config = tandem::make_default_combine_config();
+tandem::hal::BootButton g_boot_button;
+tandem::DeviceSettings g_device_settings{};
 
 uint32_t g_last_usb_us = 0;
 uint32_t g_last_status_ms = 0;
@@ -100,14 +107,47 @@ uint16_t g_measured_tx_hz = 0;
 bool g_led_state = false;
 bool g_live_serial = false;
 bool g_live_webhid = false;
+bool g_pending_reboot = false;
+bool g_reboot_tx_drained = false;
+uint32_t g_pending_reboot_start_ms = 0;
+uint32_t g_reboot_drained_ms = 0;
 uint32_t g_usb_sent = 0;
 uint32_t g_usb_dropped = 0;
-[[maybe_unused]] size_t g_next_dual_idx = 0;
+size_t g_next_dual_idx = 0;
 int8_t g_last_rssi[2]{0, 0};
 char g_peer_status_buf[32]{"L:DISC R:DISC"};
 char g_cmd_buf[tandem::config::kMaxCommandLength]{};
 size_t g_cmd_len = 0;
 bool g_cmd_reading_line = false;
+
+tandem::DeviceSettings make_default_device_settings() noexcept {
+  tandem::DeviceSettings defaults{};
+  defaults.transport_mode = tandem::StickTransportMode::UsbHid;
+  defaults.stick_id = tandem::StickId::Left;
+  defaults.base_mode = tandem::base_usb::kDefaultCombinedMode ? tandem::BaseOutputMode::Combined : tandem::BaseOutputMode::Dual;
+  return defaults;
+}
+
+void schedule_reboot() noexcept {
+  g_pending_reboot = true;
+  g_reboot_tx_drained = false;
+  g_pending_reboot_start_ms = millis();
+  g_live_webhid = false;
+  g_live_serial = false;
+}
+
+bool request_base_mode(tandem::BaseOutputMode target, bool& reboot_required) noexcept {
+  g_device_settings.base_mode = target;
+  if (!tandem::hal::save_device_settings(g_device_settings)) {
+    return false;
+  }
+  const bool target_combined = (target == tandem::BaseOutputMode::Combined);
+  reboot_required = (target_combined != tandem::base_usb::is_combined_mode());
+  if (reboot_required) {
+    schedule_reboot();
+  }
+  return true;
+}
 
 const char* link_status_str(tandem::LinkStatus status) noexcept {
   switch (status) {
@@ -161,7 +201,7 @@ tandem::config::DeviceCapabilities build_base_capabilities() noexcept {
   caps.stick_id = tandem::StickId::Unknown;
   caps.is_base_station = true;
   caps.has_config = false;
-  caps.transport_mode = tandem::base_usb::kCombinedMode ? "ESPNOW_RX_COMBINED" : "ESPNOW_RX_DUAL";
+  caps.transport_mode = tandem::base_usb::is_combined_mode() ? "ESPNOW_RX_COMBINED" : "ESPNOW_RX_DUAL";
   caps.synthetic = false;
   caps.axes_mask = 0xFFU;
   caps.buttons_mask = 0xFFFFFFFFUL;
@@ -195,6 +235,18 @@ void handle_config_line(const char* line, bool via_webhid = false, uint8_t seq =
     out = build_base_telemetry();
     return true;
   };
+  cbs.on_save = [](void*) -> bool { return tandem::hal::save_device_settings(g_device_settings); };
+  cbs.on_reset = [](void*, bool& reboot_required) -> bool {
+    const tandem::DeviceSettings defaults = make_default_device_settings();
+    g_device_settings = defaults;
+    const bool ok = tandem::hal::reset_device_settings();
+    reboot_required = (tandem::base_usb::kDefaultCombinedMode != tandem::base_usb::is_combined_mode());
+    if (reboot_required) {
+      schedule_reboot();
+    }
+    return ok;
+  };
+  cbs.on_set_base_mode = [](void*, tandem::BaseOutputMode mode, bool& reboot_required) -> bool { return request_base_mode(mode, reboot_required); };
   char resp[tandem::config::kMaxResponseLength]{};
   tandem::StickInputConfig unused_cfg{};
   const size_t n = tandem::config::process_command(line, build_base_capabilities(), unused_cfg, cbs, resp, sizeof(resp));
@@ -219,7 +271,21 @@ bool setup_espnow_rx() {
   return esp_now_register_recv_cb(on_espnow_recv) == ESP_OK;
 }
 
-void poll_serial_config() noexcept {
+void apply_serial_base_mode(tandem::BaseOutputMode target) noexcept {
+  bool reboot_required = false;
+  if (!request_base_mode(target, reboot_required)) {
+    Serial.println("[base] ERROR: failed to save mode to NVS");
+    return;
+  }
+  const char* label = (target == tandem::BaseOutputMode::Combined) ? "Combined (1x)" : "Dual (2x)";
+  if (reboot_required) {
+    Serial.printf("[base] mode -> %s (rebooting to re-enumerate USB...)\n", label);
+  } else {
+    Serial.printf("[base] already in %s mode\n", label);
+  }
+}
+
+void poll_controls(uint32_t now_ms) noexcept {
   while (Serial.available() > 0) {
     const int ch = Serial.read();
     if (g_cmd_reading_line) {
@@ -243,7 +309,21 @@ void poll_serial_config() noexcept {
       g_cmd_reading_line = true;
       g_cmd_buf[0] = '$';
       g_cmd_len = 1;
+    } else if (ch == 'm' || ch == 'M') {
+      const tandem::BaseOutputMode next_mode = tandem::base_usb::is_combined_mode() ? tandem::BaseOutputMode::Dual : tandem::BaseOutputMode::Combined;
+      apply_serial_base_mode(next_mode);
+    } else if (ch == '1') {
+      apply_serial_base_mode(tandem::BaseOutputMode::Dual);
+    } else if (ch == '2') {
+      apply_serial_base_mode(tandem::BaseOutputMode::Combined);
+    } else if (ch != '\r' && ch != '\n') {
+      Serial.printf("[base] ERROR: unknown command '%c' (use m/1/2)\n", (ch >= 32 && ch < 127) ? static_cast<char>(ch) : '?');
     }
+  }
+
+  if (g_boot_button.poll(now_ms) == tandem::hal::ButtonEvent::LongPress) {
+    const tandem::BaseOutputMode next_mode = tandem::base_usb::is_combined_mode() ? tandem::BaseOutputMode::Dual : tandem::BaseOutputMode::Combined;
+    apply_serial_base_mode(next_mode);
   }
 }
 
@@ -255,13 +335,20 @@ void setup() {
     digitalWrite(tandem::board::kPinStatusLed, LOW);
   }
 
+  g_boot_button.init(tandem::board::kPinBootButton);
+
   tandem::FailsafeConfig fs_cfg{};
   fs_cfg.timeout_ms = kFailsafeTimeoutMs;
   fs_cfg.failsafe_state = tandem::make_centered_state(tandem::kStateFlagFailsafe);
   g_monitors[0].set_config(fs_cfg);
   g_monitors[1].set_config(fs_cfg);
 
-  tandem::base_usb::begin();
+  const tandem::DeviceSettings default_dev = make_default_device_settings();
+  g_device_settings = default_dev;
+  const tandem::hal::NvsLoadStatus dev_nvs_status = tandem::hal::load_device_settings(g_device_settings);
+  g_device_settings = tandem::clamp_device_settings(g_device_settings, tandem::BoardTransportCaps{true, false, true}, default_dev);
+
+  tandem::base_usb::begin(g_device_settings.base_mode == tandem::BaseOutputMode::Combined);
 
   const bool espnow_ok = setup_espnow_rx();
   uint8_t local_mac[6]{};
@@ -280,9 +367,11 @@ void setup() {
   Serial.printf("Base MAC   : %02X:%02X:%02X:%02X:%02X:%02X (ch=%u)\n", local_mac[0], local_mac[1], local_mac[2], local_mac[3], local_mac[4],
                 local_mac[5], static_cast<unsigned>(kEspNowChannel));
   Serial.printf("ESP-NOW    : %s (failsafe=%lu ms)\n", espnow_ok ? "READY" : "INIT FAILED", static_cast<unsigned long>(kFailsafeTimeoutMs));
-  Serial.printf("USB HID    : %s (VID=0x%04X PID=0x%04X, %s, %u-byte desc)\n", tandem::base_usb::kHidInterfaceName,
-                static_cast<unsigned>(tandem::base_usb::kUsbVid), static_cast<unsigned>(tandem::base_usb::kUsbPid),
-                tandem::base_usb::kCombinedMode ? "Combined 1x" : "Dual 2x", static_cast<unsigned>(tandem::base_usb::kReportDescriptorBytes));
+  Serial.printf("USB HID    : %s (VID=0x%04X PID=0x%04X, %s, %u-byte desc)\n", tandem::base_usb::hid_interface_name(),
+                static_cast<unsigned>(tandem::base_usb::kUsbVid), static_cast<unsigned>(tandem::base_usb::usb_pid()),
+                tandem::base_usb::is_combined_mode() ? "Combined 1x" : "Dual 2x", static_cast<unsigned>(tandem::base_usb::report_descriptor_bytes()));
+  Serial.printf("Dev NVS    : %s\n", tandem::hal::nvs_load_status_name(dev_nvs_status));
+  Serial.println("Controls   : 'm'/BOOT-long = Dual<->Combined | '1' = Dual | '2' = Combined");
 
   const uint32_t now_ms = millis();
   g_last_usb_us = micros();
@@ -293,7 +382,7 @@ void setup() {
 
 void loop() {
   const uint32_t now_ms = millis();
-  poll_serial_config();
+  poll_controls(now_ms);
   tandem::base_usb::drain_config_commands([](const char* hid_cmd, uint8_t hid_seq) { handle_config_line(hid_cmd, true, hid_seq); });
   const uint32_t now_us = micros();
 
@@ -326,22 +415,24 @@ void loop() {
       g_monitors[i].update(now_ms);
     }
 
-    if constexpr (tandem::base_usb::kCombinedMode) {
-      const tandem::StickState combined = tandem::combine_sticks(g_monitors[0].state(), g_monitors[1].state(), g_combine_config);
-      if (tandem::base_usb::send_joystick(tandem::base_usb::kReportIdLeft, combined)) {
-        ++g_usb_sent;
-        ++g_tx_report_count;
+    if (!g_pending_reboot) {
+      if (tandem::base_usb::is_combined_mode()) {
+        const tandem::StickState combined = tandem::combine_sticks(g_monitors[0].state(), g_monitors[1].state(), g_combine_config);
+        if (tandem::base_usb::send_joystick(tandem::base_usb::kReportIdLeft, combined)) {
+          ++g_usb_sent;
+          ++g_tx_report_count;
+        } else {
+          ++g_usb_dropped;
+        }
       } else {
-        ++g_usb_dropped;
-      }
-    } else {
-      const uint8_t report_ids[2] = {tandem::base_usb::kReportIdLeft, tandem::base_usb::kReportIdRight};
-      if (tandem::base_usb::send_joystick(report_ids[g_next_dual_idx], g_monitors[g_next_dual_idx].state())) {
-        ++g_usb_sent;
-        ++g_tx_report_count;
-        g_next_dual_idx ^= 1U;
-      } else {
-        ++g_usb_dropped;
+        const uint8_t report_ids[2] = {tandem::base_usb::kReportIdLeft, tandem::base_usb::kReportIdRight};
+        if (tandem::base_usb::send_joystick(report_ids[g_next_dual_idx], g_monitors[g_next_dual_idx].state())) {
+          ++g_usb_sent;
+          ++g_tx_report_count;
+          g_next_dual_idx ^= 1U;
+        } else {
+          ++g_usb_dropped;
+        }
       }
     }
   }
@@ -370,7 +461,7 @@ void loop() {
       g_last_live_ms = now_ms;
       const tandem::RawStickInput raw_zero{};
       const tandem::StickState active_state =
-          tandem::base_usb::kCombinedMode
+          tandem::base_usb::is_combined_mode()
               ? tandem::combine_sticks(g_monitors[0].state(), g_monitors[1].state(), g_combine_config)
               : ((g_monitors[0].is_connected() || !g_monitors[1].is_connected()) ? g_monitors[0].state() : g_monitors[1].state());
       char resp[tandem::config::kMaxResponseLength]{};
@@ -407,5 +498,19 @@ void loop() {
   tandem::base_usb::poll_config_tx(now_ms, webhid_stalled);
   if (webhid_stalled) {
     g_live_webhid = false;
+  }
+
+  if (g_pending_reboot) {
+    if (!g_reboot_tx_drained && !tandem::base_usb::has_config_tx_pending()) {
+      g_reboot_tx_drained = true;
+      g_reboot_drained_ms = now_ms;
+    }
+    const bool grace_elapsed = g_reboot_tx_drained && static_cast<uint32_t>(now_ms - g_reboot_drained_ms) >= kRebootGraceMs;
+    const bool max_wait_elapsed = static_cast<uint32_t>(now_ms - g_pending_reboot_start_ms) >= kRebootMaxWaitMs;
+    if (grace_elapsed || max_wait_elapsed) {
+      Serial.flush();
+      delay(20);
+      ESP.restart();
+    }
   }
 }

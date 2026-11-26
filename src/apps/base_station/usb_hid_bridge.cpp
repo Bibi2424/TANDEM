@@ -16,19 +16,25 @@ namespace {
 static_assert(tandem::kHidJoystickReportDescriptor[6] == 0x85U && tandem::kHidJoystickReportDescriptor[7] == tandem::kHidReportIdJoystick,
               "Expected Report ID byte at offset 7 in canonical HID descriptor");
 
-uint8_t g_report_descriptor[kReportDescriptorBytes]{};
+bool g_combined_mode = kDefaultCombinedMode;
+uint8_t g_report_descriptor[kDualReportDescriptorBytes]{};
+size_t g_report_descriptor_len = kDefaultCombinedMode ? kCombinedReportDescriptorBytes : kDualReportDescriptorBytes;
 tandem::hal::HidConfigEndpoint g_webhid_endpoint{tandem::config::kHidConfigUsbReportBytes};
 
-void init_report_descriptor() noexcept {
+void init_report_descriptor(bool combined_mode) noexcept {
+  g_combined_mode = combined_mode;
+  size_t joystick_bytes = tandem::kHidJoystickReportDescriptorBytes;
   std::memcpy(g_report_descriptor, tandem::kHidJoystickReportDescriptor, tandem::kHidJoystickReportDescriptorBytes);
   g_report_descriptor[7] = kReportIdLeft;
-  if constexpr (!kCombinedMode) {
+  if (!combined_mode) {
     std::memcpy(&g_report_descriptor[tandem::kHidJoystickReportDescriptorBytes], tandem::kHidJoystickReportDescriptor,
                 tandem::kHidJoystickReportDescriptorBytes);
     g_report_descriptor[tandem::kHidJoystickReportDescriptorBytes + 7] = kReportIdRight;
+    joystick_bytes = tandem::kHidJoystickReportDescriptorBytes * 2U;
   }
-  std::memcpy(&g_report_descriptor[kJoystickDescriptorBytes], tandem::config::kHidConfigUsbReportDescriptor.bytes,
+  std::memcpy(&g_report_descriptor[joystick_bytes], tandem::config::kHidConfigUsbReportDescriptor.bytes,
               tandem::config::kHidConfigReportDescriptorBytes);
+  g_report_descriptor_len = joystick_bytes + tandem::config::kHidConfigReportDescriptorBytes;
 }
 
 bool send_usb_config_chunk(void*, const uint8_t* data, size_t len) noexcept {
@@ -36,6 +42,22 @@ bool send_usb_config_chunk(void*, const uint8_t* data, size_t len) noexcept {
 }
 
 }  // namespace
+
+bool is_combined_mode() noexcept {
+  return g_combined_mode;
+}
+
+uint16_t usb_pid() noexcept {
+  return g_combined_mode ? kUsbPidCombined : kUsbPidDual;
+}
+
+const char* hid_interface_name() noexcept {
+  return g_combined_mode ? "TANDEM Combined Stick" : "TANDEM Base Station";
+}
+
+size_t report_descriptor_bytes() noexcept {
+  return g_report_descriptor_len;
+}
 
 }  // namespace tandem::base_usb
 
@@ -46,7 +68,7 @@ extern "C" uint16_t tandem_hid_load_descriptor(uint8_t* dst, uint8_t* itf) {
   }
   initialized = true;
 
-  const uint8_t str_index = tinyusb_add_string_descriptor(tandem::base_usb::kHidInterfaceName);
+  const uint8_t str_index = tinyusb_add_string_descriptor(tandem::base_usb::hid_interface_name());
   const uint8_t ep_in = tinyusb_get_free_in_endpoint();
   const uint8_t ep_out = tinyusb_get_free_out_endpoint();
   if (ep_in == 0 || ep_out == 0) {
@@ -54,7 +76,7 @@ extern "C" uint16_t tandem_hid_load_descriptor(uint8_t* dst, uint8_t* itf) {
   }
 
   const uint8_t descriptor[TUD_HID_INOUT_DESC_LEN] = {
-      TUD_HID_INOUT_DESCRIPTOR(*itf, str_index, HID_ITF_PROTOCOL_NONE, static_cast<uint16_t>(tandem::base_usb::kReportDescriptorBytes), ep_out,
+      TUD_HID_INOUT_DESCRIPTOR(*itf, str_index, HID_ITF_PROTOCOL_NONE, static_cast<uint16_t>(tandem::base_usb::report_descriptor_bytes()), ep_out,
                                static_cast<uint8_t>(0x80U | ep_in), CFG_TUD_ENDPOINT_SIZE, 1)};
   *itf += 1;
   std::memcpy(dst, descriptor, TUD_HID_INOUT_DESC_LEN);
@@ -92,7 +114,7 @@ namespace {
 // when ARDUINO_USB_CDC_ON_BOOT=1.
 struct TandemHidRegistrar {
   TandemHidRegistrar() {
-    init_report_descriptor();
+    init_report_descriptor(kDefaultCombinedMode);
     tinyusb_enable_interface2(USB_INTERFACE_HID, TUD_HID_INOUT_DESC_LEN, tandem_hid_load_descriptor, false);
   }
 };
@@ -101,7 +123,9 @@ TandemHidRegistrar g_hid_registrar;
 
 }  // namespace
 
-void begin() noexcept {
+void begin(bool combined_mode) noexcept {
+  init_report_descriptor(combined_mode);
+
   static char product_name[32]{};
   uint8_t base_mac[6]{};
   if (esp_efuse_mac_get_default(base_mac) != ESP_OK) {
@@ -110,7 +134,7 @@ void begin() noexcept {
   tandem::format_device_name(product_name, sizeof(product_name), "TANDEM-Base", base_mac);
 
   USB.VID(kUsbVid);
-  USB.PID(kUsbPid);
+  USB.PID(usb_pid());
   USB.manufacturerName("T.A.N.D.E.M.");
   USB.productName(product_name);
   USB.begin();
@@ -138,6 +162,10 @@ bool send_config_live(const char* data, size_t len) noexcept {
 
 bool poll_config_tx(uint32_t now_ms, bool& stalled_out) noexcept {
   return g_webhid_endpoint.poll_tx(now_ms, send_usb_config_chunk, nullptr, stalled_out);
+}
+
+bool has_config_tx_pending() noexcept {
+  return g_webhid_endpoint.has_tx_pending();
 }
 
 }  // namespace tandem::base_usb

@@ -54,6 +54,7 @@ class HidConfigEndpoint {
 
   /// Sends at most one pending TX chunk; resets TX queue and sets `stalled_out` on timeout.
   bool poll_tx(uint32_t now_ms, SendChunkFn send_fn, void* ctx, bool& stalled_out) noexcept;
+  bool has_tx_pending() const noexcept { return tx_queue_.has_pending(); }
   void reset_tx() noexcept;
 
  private:

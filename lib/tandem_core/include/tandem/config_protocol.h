@@ -65,9 +65,12 @@ struct TelemetrySnapshot {
 
 struct ConfigCallbacks {
   bool (*on_save)(void* ctx){nullptr};
-  bool (*on_reset)(void* ctx){nullptr};
+  bool (*on_reset)(void* ctx, bool& reboot_required){nullptr};
   void (*on_live_changed)(void* ctx, bool enabled){nullptr};
   bool (*on_get_telemetry)(void* ctx, TelemetrySnapshot& out){nullptr};
+  bool (*on_set_transport_mode)(void* ctx, StickTransportMode mode){nullptr};
+  bool (*on_set_stick_id)(void* ctx, StickId stick_id){nullptr};
+  bool (*on_set_base_mode)(void* ctx, BaseOutputMode mode, bool& reboot_required){nullptr};
   void* ctx{nullptr};
 };
 

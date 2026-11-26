@@ -47,7 +47,7 @@
 - **Directory layout:**
   - `.clang-format` / `.editorconfig` — Authoritative C++17 formatting rules (Google style with 150-column limit) and cross-language editor defaults; detailed guidelines live in [docs/coding_standard.md](docs/coding_standard.md).
   - `lib/tandem_core/` — Pure, dependency-free C++17 core logic (types, input pipeline, curve/deadzone math, failsafe logic, codecs, config validation), shared across all firmware targets and native tests.
-  - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner, NVS config persistence, and `HidConfigEndpoint` RTOS queue/TX adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig`.
+  - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner, debounced `BootButton`, NVS config & device-settings persistence (`config_nvs`), and `HidConfigEndpoint` RTOS queue/TX adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig` / `tandem::DeviceSettings`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
   - `tools/configurator/` — Static zero-build WebHID, WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.

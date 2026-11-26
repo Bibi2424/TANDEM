@@ -21,6 +21,7 @@
   const HID_OVERHEAD_BYTES = 8;
   const AXIS_NAMES = ["X", "Y", "Z", "Rx", "Ry", "Rz", "Slider", "Dial"];
   const HAT_LABELS = ["Centered", "N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const STICK_MODES = ["USB_HID", "BLE_HID", "ESPNOW_TX", "BLE_CFG"];
   const NOISE_WINDOW_SIZE = 60;
   const CIRCULARITY_SECTORS = 36;
 
@@ -44,6 +45,12 @@
     valInput: document.getElementById("val-input"),
     valFw: document.getElementById("val-fw"),
     valTransports: document.getElementById("val-transports"),
+    deviceSettingsRow: document.getElementById("device-settings-row"),
+    stickDevControls: document.getElementById("stick-dev-controls"),
+    baseDevControls: document.getElementById("base-dev-controls"),
+    selStickRole: document.getElementById("sel-stick-role"),
+    selStickMode: document.getElementById("sel-stick-mode"),
+    selBaseMode: document.getElementById("sel-base-mode"),
     telemetryPanel: document.getElementById("telemetry-panel"),
     tlmSampleHz: document.getElementById("tlm-sample-hz"),
     tlmTxHz: document.getElementById("tlm-tx-hz"),
@@ -151,10 +158,15 @@
             if (line.startsWith(RESPONSE_PREFIX)) {
               try {
                 const msg = JSON.parse(line.slice(RESPONSE_PREFIX.length));
-                const waiter = this.pending.get(msg.cmd);
+                let waiter = this.pending.get(msg.cmd);
+                let waiterKey = msg.cmd;
+                if (!waiter && msg.cmd === "unknown" && msg.ok === false && this.pending.size === 1) {
+                  waiterKey = this.pending.keys().next().value;
+                  waiter = this.pending.get(waiterKey);
+                }
                 if (waiter) {
                   clearTimeout(waiter.timer);
-                  this.pending.delete(msg.cmd);
+                  this.pending.delete(waiterKey);
                   waiter.resolve(msg);
                 }
                 this.onMessage(msg);
@@ -227,10 +239,15 @@
           try {
             const msg = JSON.parse(line.slice(RESPONSE_PREFIX.length));
             if (resolvePending) {
-              const waiter = this.pending.get(msg.cmd);
+              let waiter = this.pending.get(msg.cmd);
+              let waiterKey = msg.cmd;
+              if (!waiter && msg.cmd === "unknown" && msg.ok === false && this.pending.size === 1) {
+                waiterKey = this.pending.keys().next().value;
+                waiter = this.pending.get(waiterKey);
+              }
               if (waiter) {
                 clearTimeout(waiter.timer);
-                this.pending.delete(msg.cmd);
+                this.pending.delete(waiterKey);
                 waiter.resolve(msg);
               }
             }
@@ -645,6 +662,7 @@
     diagByCard: new Map(),
     renderedLiveKey: "",
     gamepadRafId: null,
+    expectedDisconnectNotice: "",
   };
 
   const hasHid = "hid" in navigator;
@@ -851,6 +869,30 @@
     } else {
       els.valTransports.textContent = caps.mode || "—";
     }
+
+    if (caps.role === "BASE") {
+      els.selBaseMode.value = caps.mode === "ESPNOW_RX_COMBINED" ? "COMBINED" : "DUAL";
+    } else {
+      if (caps.role === "L" || caps.role === "R") {
+        els.selStickRole.value = caps.role;
+      }
+      const supportedModes = Array.isArray(caps.transports)
+        ? caps.transports.filter((tx) => STICK_MODES.includes(tx))
+        : [];
+      if (caps.mode && STICK_MODES.includes(caps.mode) && !supportedModes.includes(caps.mode)) {
+        supportedModes.push(caps.mode);
+      }
+      els.selStickMode.innerHTML = "";
+      for (const mode of supportedModes) {
+        const opt = document.createElement("option");
+        opt.value = mode;
+        opt.textContent = mode;
+        els.selStickMode.appendChild(opt);
+      }
+      if (caps.mode) {
+        els.selStickMode.value = caps.mode;
+      }
+    }
   }
 
   function updateTelemetryDom() {
@@ -897,13 +939,18 @@
     els.btnConnect.disabled = connected || !hasSerial;
     els.btnConnectBle.disabled = connected || !hasBle;
     els.btnDisconnect.disabled = !connected;
-    els.btnReset.disabled = !cfgAllowed;
+    els.btnReset.disabled = !connected;
     els.btnSave.disabled = !cfgAllowed;
     els.btnCenterAll.disabled = !cfgAllowed;
     els.btnSweepAll.disabled = !cfgAllowed;
     els.btnApplyAll.disabled = !cfgAllowed;
     els.btnSourceDevice.disabled = !connected;
     els.valStatus.textContent = connected ? `Connected (${transport.label})` : "Disconnected";
+
+    const isBase = connected && state.caps?.role === "BASE";
+    els.deviceSettingsRow.classList.toggle("hidden", !connected);
+    els.stickDevControls.classList.toggle("hidden", !connected || isBase);
+    els.baseDevControls.classList.toggle("hidden", !connected || !isBase);
 
     if (!connected) {
       state.caps = null;
@@ -985,11 +1032,13 @@
   }
 
   function handleUnexpectedDisconnect() {
+    const notice = state.expectedDisconnectNotice;
+    state.expectedDisconnectNotice = "";
     setConnectedUi(false);
     state.sweeping = false;
     els.btnSweepAll.textContent = "Start Min/Max Sweep";
     els.btnSweepAll.className = "btn btn-secondary";
-    showToast("Device connection closed.", "warn");
+    showToast(notice || "Device connection closed.", "warn");
   }
 
   function buildHatSvg(cardKey) {
@@ -1642,6 +1691,7 @@
 
   async function connectWith(selectedTransport) {
     clearToast();
+    state.expectedDisconnectNotice = "";
     transport = selectedTransport;
     try {
       await transport.connect();
@@ -1716,12 +1766,135 @@
   });
 
   els.btnReset.addEventListener("click", async () => {
-    const res = await transport.sendCommand("reset", "reset");
-    if (res.ok) {
-      await refreshConfig();
-      showToast("Reset stick config to board defaults.", "ok");
-    } else {
-      showToast(`Reset failed: ${res.err}`, "err");
+    const wasBase = state.caps?.role === "BASE";
+    const rebootMsg =
+      "Factory defaults restored; Base Station is rebooting to re-enumerate USB. Reconnect once ready.";
+    if (wasBase) {
+      state.expectedDisconnectNotice = rebootMsg;
+    }
+    try {
+      const res = await transport.sendCommand("reset", "reset");
+      if (res.ok) {
+        if (res.reboot) {
+          state.expectedDisconnectNotice = rebootMsg;
+          showToast(rebootMsg, "warn");
+        } else {
+          state.expectedDisconnectNotice = "";
+          await refreshConfig();
+          showToast("Reset device settings and stick config to defaults.", "ok");
+        }
+      } else {
+        state.expectedDisconnectNotice = "";
+        showToast(`Reset failed: ${res.err}`, "err");
+      }
+    } catch (err) {
+      if (wasBase && err.message === "Disconnected") {
+        showToast(rebootMsg, "warn");
+      } else {
+        state.expectedDisconnectNotice = "";
+        showToast(`Reset failed: ${err.message}`, "err");
+      }
+    }
+  });
+
+  els.selStickRole.addEventListener("change", async () => {
+    const nextRole = els.selStickRole.value;
+    const prevRole = state.caps?.role;
+    try {
+      const res = await transport.sendCommand(`role ${nextRole}`, "role");
+      if (!res.ok) {
+        if (prevRole) els.selStickRole.value = prevRole;
+        showToast(`Role change rejected: ${res.err}`, "err");
+        return;
+      }
+      if (state.caps) {
+        state.caps.role = res.role || nextRole;
+        updateIdentityBadges(state.caps);
+        if (state.liveSource === "device" && state.activeTab === "live") {
+          state.renderedLiveKey = "";
+          renderLiveCards();
+        }
+      }
+      showToast("Stick role saved to flash.", "ok");
+    } catch (err) {
+      if (prevRole) els.selStickRole.value = prevRole;
+      showToast(`Role change failed: ${err.message}`, "err");
+    }
+  });
+
+  els.selStickMode.addEventListener("change", async () => {
+    const nextMode = els.selStickMode.value;
+    const prevMode = state.caps?.mode;
+    const expectBleClose = transport === bleTransport && nextMode !== "BLE_CFG";
+    if (expectBleClose) {
+      state.expectedDisconnectNotice = `Stick saved ${nextMode} and switched modes (BLE Config session closed).`;
+    }
+    try {
+      const res = await transport.sendCommand(`mode ${nextMode}`, "mode");
+      if (!res.ok) {
+        state.expectedDisconnectNotice = "";
+        if (prevMode) els.selStickMode.value = prevMode;
+        showToast(`Mode change rejected: ${res.err}`, "err");
+        return;
+      }
+      if (expectBleClose) {
+        const msg = `Stick saved ${nextMode} and is switching modes (BLE Config session closing).`;
+        state.expectedDisconnectNotice = msg;
+        showToast(msg, "warn");
+        return;
+      }
+      state.expectedDisconnectNotice = "";
+      if (state.caps) {
+        state.caps.mode = res.mode || nextMode;
+        updateIdentityBadges(state.caps);
+      }
+      showToast(`Transport mode saved (${res.mode || nextMode}).`, "ok");
+    } catch (err) {
+      if (expectBleClose && err.message === "Disconnected") {
+        showToast(`Stick saved ${nextMode} and switched modes (BLE Config session closed).`, "warn");
+      } else {
+        state.expectedDisconnectNotice = "";
+        if (prevMode) els.selStickMode.value = prevMode;
+        showToast(`Mode change failed: ${err.message}`, "err");
+      }
+    }
+  });
+
+  els.selBaseMode.addEventListener("change", async () => {
+    const nextMode = els.selBaseMode.value;
+    const prevMode = state.caps?.mode === "ESPNOW_RX_COMBINED" ? "COMBINED" : "DUAL";
+    const expectReboot = nextMode !== prevMode;
+    const rebootMsg = `Base Station saved ${nextMode} and is rebooting to re-enumerate USB. Reconnect once ready.`;
+    if (expectReboot) {
+      state.expectedDisconnectNotice = rebootMsg;
+    }
+    try {
+      const res = await transport.sendCommand(`mode ${nextMode}`, "mode");
+      if (!res.ok) {
+        state.expectedDisconnectNotice = "";
+        els.selBaseMode.value = prevMode;
+        showToast(`Base mode change rejected: ${res.err}`, "err");
+        return;
+      }
+      if (res.reboot) {
+        state.expectedDisconnectNotice = rebootMsg;
+        showToast(rebootMsg, "warn");
+      } else {
+        state.expectedDisconnectNotice = "";
+        if (state.caps) {
+          state.caps.mode = res.mode || state.caps.mode;
+          updateIdentityBadges(state.caps);
+        }
+        showToast(`Base Station already in ${nextMode} mode.`, "ok");
+      }
+    } catch (err) {
+      if (expectReboot && err.message === "Disconnected") {
+        showToast(`Base Station switched to ${nextMode} and disconnected to re-enumerate USB. Reconnect once ready.`, "warn");
+      } else {
+        state.expectedDisconnectNotice = "";
+        els.selBaseMode.value = prevMode;
+        showToast(`Base mode change failed: ${err.message}`, "err");
+      }
     }
   });
 

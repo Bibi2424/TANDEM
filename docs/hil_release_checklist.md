@@ -85,8 +85,8 @@ Boards Tested   : <e.g. ESP32-S2 Mini, ESP32-WROOM x2, ESP32-S3 DevKitC-1>
 - [ ] Capture center (**Capture Center (All)**), sweep min/max (**Start Min/Max Sweep**), set distinct non-default parameters (e.g., deadzone `0.12`, expo `0.40`, invert toggled on Axis 0), click **Apply All Axes**, then click **Save to Flash**.
 - [ ] Disconnect USB and remove all power for >= **5 seconds**, then reconnect.
 - [ ] Confirm serial boot banner prints `Config NVS : loaded` and reading config in Web Configurator (`get`) matches every saved calibration, deadzone, invert, and curve value verbatim.
-- [ ] Click **Reset Defaults**, power-cycle >= **5 seconds**, reconnect, and confirm `Config NVS : not_found_defaults` with factory defaults active.
-- [ ] *(Required once `#74` lands)* Verify selected transport mode, Left/Right stick role, and Base Station mode also survive a full power cycle cleanly.
+- [ ] Click **Reset Defaults**, power-cycle >= **5 seconds**, reconnect, and confirm `Config NVS : not_found_defaults` and `Dev NVS : not_found_defaults` with factory defaults active.
+- [ ] Verify selected transport mode, Left/Right stick role, and Base Station Dual/Combined mode also survive a full power cycle cleanly.
 
 ---
 

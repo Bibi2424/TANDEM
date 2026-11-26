@@ -3,15 +3,11 @@
 #include <cstdint>
 
 #include "boards/board_config.h"
+#include "tandem/types.h"
 
 namespace tandem::stick {
 
-enum class StickTransportMode : uint8_t {
-  UsbHid = 0,
-  BleHid = 1,
-  EspNowTx = 2,
-  BleConfig = 3,
-};
+using tandem::StickTransportMode;
 
 constexpr bool is_mode_supported(StickTransportMode mode) noexcept {
   switch (mode) {
@@ -27,17 +23,7 @@ constexpr bool is_mode_supported(StickTransportMode mode) noexcept {
 }
 
 constexpr const char* mode_name(StickTransportMode mode) noexcept {
-  switch (mode) {
-    case StickTransportMode::UsbHid:
-      return "USB_HID";
-    case StickTransportMode::BleHid:
-      return "BLE_HID";
-    case StickTransportMode::EspNowTx:
-      return "ESPNOW_TX";
-    case StickTransportMode::BleConfig:
-      return "BLE_CFG";
-  }
-  return "UNKNOWN";
+  return tandem::stick_transport_mode_name(mode);
 }
 
 constexpr StickTransportMode default_transport_mode() noexcept {

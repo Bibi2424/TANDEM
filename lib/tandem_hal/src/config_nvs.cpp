@@ -9,32 +9,62 @@ namespace {
 
 constexpr char kNvsNamespace[] = "tandem";
 constexpr char kNvsConfigKey[] = "stick_cfg";
+constexpr char kNvsDeviceSettingsKey[] = "dev_cfg";
 
-}  // namespace
-
-NvsLoadStatus load_stick_config(StickInputConfig& out) noexcept {
+NvsLoadStatus read_nvs_blob(const char* key, uint8_t* dst, size_t expected_len) noexcept {
   Preferences prefs;
   if (!prefs.begin(kNvsNamespace, true)) {
     return NvsLoadStatus::OpenFailed;
   }
 
-  const size_t len = prefs.getBytesLength(kNvsConfigKey);
+  const size_t len = prefs.getBytesLength(key);
   if (len == 0) {
     prefs.end();
     return NvsLoadStatus::NotFound;
   }
 
-  if (len != tandem::kPersistedConfigBytes) {
+  if (len != expected_len) {
     prefs.end();
     return NvsLoadStatus::CorruptOrInvalid;
   }
 
-  tandem::PersistedConfigBlob blob{};
-  const size_t read_len = prefs.getBytes(kNvsConfigKey, blob.bytes, sizeof(blob.bytes));
+  const size_t read_len = prefs.getBytes(key, dst, expected_len);
   prefs.end();
+  return (read_len == expected_len) ? NvsLoadStatus::Loaded : NvsLoadStatus::CorruptOrInvalid;
+}
 
-  if (read_len != sizeof(blob.bytes)) {
-    return NvsLoadStatus::CorruptOrInvalid;
+bool write_nvs_blob(const char* key, const uint8_t* data, size_t len) noexcept {
+  Preferences prefs;
+  if (!prefs.begin(kNvsNamespace, false)) {
+    return false;
+  }
+
+  const size_t written = prefs.putBytes(key, data, len);
+  prefs.end();
+  return written == len;
+}
+
+bool remove_nvs_key(const char* key) noexcept {
+  Preferences prefs;
+  if (!prefs.begin(kNvsNamespace, false)) {
+    return false;
+  }
+
+  if (prefs.isKey(key)) {
+    prefs.remove(key);
+  }
+  const bool cleared = !prefs.isKey(key);
+  prefs.end();
+  return cleared;
+}
+
+}  // namespace
+
+NvsLoadStatus load_stick_config(StickInputConfig& out) noexcept {
+  tandem::PersistedConfigBlob blob{};
+  const NvsLoadStatus status = read_nvs_blob(kNvsConfigKey, blob.bytes, sizeof(blob.bytes));
+  if (status != NvsLoadStatus::Loaded) {
+    return status;
   }
 
   const tandem::ConfigDecodeResult res = tandem::decode_stick_config(blob.bytes, sizeof(blob.bytes), out);
@@ -46,29 +76,34 @@ bool save_stick_config(const StickInputConfig& cfg) noexcept {
   if (!tandem::encode_stick_config(cfg, blob)) {
     return false;
   }
-
-  Preferences prefs;
-  if (!prefs.begin(kNvsNamespace, false)) {
-    return false;
-  }
-
-  const size_t written = prefs.putBytes(kNvsConfigKey, blob.bytes, sizeof(blob.bytes));
-  prefs.end();
-  return written == sizeof(blob.bytes);
+  return write_nvs_blob(kNvsConfigKey, blob.bytes, sizeof(blob.bytes));
 }
 
 bool reset_stick_config() noexcept {
-  Preferences prefs;
-  if (!prefs.begin(kNvsNamespace, false)) {
-    return false;
+  return remove_nvs_key(kNvsConfigKey);
+}
+
+NvsLoadStatus load_device_settings(DeviceSettings& out) noexcept {
+  tandem::PersistedDeviceSettingsBlob blob{};
+  const NvsLoadStatus status = read_nvs_blob(kNvsDeviceSettingsKey, blob.bytes, sizeof(blob.bytes));
+  if (status != NvsLoadStatus::Loaded) {
+    return status;
   }
 
-  if (prefs.isKey(kNvsConfigKey)) {
-    prefs.remove(kNvsConfigKey);
+  const tandem::ConfigDecodeResult res = tandem::decode_device_settings(blob.bytes, sizeof(blob.bytes), out);
+  return (res == tandem::ConfigDecodeResult::Ok) ? NvsLoadStatus::Loaded : NvsLoadStatus::CorruptOrInvalid;
+}
+
+bool save_device_settings(const DeviceSettings& settings) noexcept {
+  tandem::PersistedDeviceSettingsBlob blob{};
+  if (!tandem::encode_device_settings(settings, blob)) {
+    return false;
   }
-  const bool cleared = !prefs.isKey(kNvsConfigKey);
-  prefs.end();
-  return cleared;
+  return write_nvs_blob(kNvsDeviceSettingsKey, blob.bytes, sizeof(blob.bytes));
+}
+
+bool reset_device_settings() noexcept {
+  return remove_nvs_key(kNvsDeviceSettingsKey);
 }
 
 const char* nvs_load_status_name(NvsLoadStatus status) noexcept {
