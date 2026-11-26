@@ -1,5 +1,6 @@
 #include "tandem/config_protocol.h"
 
+#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -169,6 +170,33 @@ size_t format_error(const char* cmd, const char* err, char* out, size_t out_size
 
 bool token_equals(const char* tok, size_t tok_len, const char* literal) noexcept {
   return std::strlen(literal) == tok_len && std::strncmp(tok, literal, tok_len) == 0;
+}
+
+bool token_iequals(const char* tok, size_t tok_len, const char* literal) noexcept {
+  if (tok == nullptr || literal == nullptr || std::strlen(literal) != tok_len) {
+    return false;
+  }
+  for (size_t i = 0; i < tok_len; ++i) {
+    const unsigned char a = static_cast<unsigned char>(tok[i]);
+    const unsigned char b = static_cast<unsigned char>(literal[i]);
+    if (std::tolower(a) != std::tolower(b)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool parse_token(const char*& p, const char*& tok_start, size_t& tok_len) noexcept {
+  p = skip_ws(p);
+  if (p == nullptr || *p == '\0') {
+    return false;
+  }
+  tok_start = p;
+  while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+    ++p;
+  }
+  tok_len = static_cast<size_t>(p - tok_start);
+  return tok_len > 0U;
 }
 
 }  // namespace
@@ -425,20 +453,124 @@ size_t process_command(const char* line, const DeviceCapabilities& caps, StickIn
     return pos;
   }
 
+  if (token_equals(cmd_start, cmd_len, "mode")) {
+    const char* arg = nullptr;
+    size_t arg_len = 0;
+    if (!parse_token(p, arg, arg_len) || !has_no_trailing_tokens(p)) {
+      return format_error("mode", "invalid_args", out, out_size);
+    }
+
+    if (caps.is_base_station) {
+      BaseOutputMode mode = BaseOutputMode::Dual;
+      if (token_iequals(arg, arg_len, "DUAL") || token_iequals(arg, arg_len, "ESPNOW_RX_DUAL")) {
+        mode = BaseOutputMode::Dual;
+      } else if (token_iequals(arg, arg_len, "COMBINED") || token_iequals(arg, arg_len, "ESPNOW_RX_COMBINED")) {
+        mode = BaseOutputMode::Combined;
+      } else {
+        return format_error("mode", "invalid_mode", out, out_size);
+      }
+      if (callbacks.on_set_base_mode == nullptr) {
+        return format_error("mode", "unsupported", out, out_size);
+      }
+      bool reboot_required = false;
+      if (!callbacks.on_set_base_mode(callbacks.ctx, mode, reboot_required)) {
+        return format_error("mode", "mode_change_failed", out, out_size);
+      }
+      size_t pos = 0;
+      if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"mode\",\"ok\":true,\"mode\":\"%s\",\"reboot\":%s}\n", kResponsePrefix,
+                      static_cast<unsigned>(kProtocolVersion), base_output_mode_name(mode), reboot_required ? "true" : "false")) {
+        return 0;
+      }
+      return pos;
+    }
+
+    StickTransportMode mode = StickTransportMode::UsbHid;
+    uint8_t required_mask = 0U;
+    if (token_iequals(arg, arg_len, "USB_HID")) {
+      mode = StickTransportMode::UsbHid;
+      required_mask = kTransportMaskUsbHid;
+    } else if (token_iequals(arg, arg_len, "BLE_HID")) {
+      mode = StickTransportMode::BleHid;
+      required_mask = kTransportMaskBleHid;
+    } else if (token_iequals(arg, arg_len, "ESPNOW_TX")) {
+      mode = StickTransportMode::EspNowTx;
+      required_mask = kTransportMaskEspNowTx;
+    } else if (token_iequals(arg, arg_len, "BLE_CFG")) {
+      mode = StickTransportMode::BleConfig;
+      required_mask = kTransportMaskBleConfig;
+    } else {
+      return format_error("mode", "invalid_mode", out, out_size);
+    }
+
+    if ((caps.transports_mask & required_mask) == 0U) {
+      return format_error("mode", "unsupported_mode", out, out_size);
+    }
+    if (callbacks.on_set_transport_mode == nullptr) {
+      return format_error("mode", "unsupported", out, out_size);
+    }
+    if (!callbacks.on_set_transport_mode(callbacks.ctx, mode)) {
+      return format_error("mode", "mode_change_failed", out, out_size);
+    }
+    size_t pos = 0;
+    if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"mode\",\"ok\":true,\"mode\":\"%s\",\"reboot\":false}\n", kResponsePrefix,
+                    static_cast<unsigned>(kProtocolVersion), stick_transport_mode_name(mode))) {
+      return 0;
+    }
+    return pos;
+  }
+
+  if (token_equals(cmd_start, cmd_len, "role")) {
+    const char* arg = nullptr;
+    size_t arg_len = 0;
+    if (!parse_token(p, arg, arg_len) || !has_no_trailing_tokens(p)) {
+      return format_error("role", "invalid_args", out, out_size);
+    }
+    if (caps.is_base_station || callbacks.on_set_stick_id == nullptr) {
+      return format_error("role", "unsupported", out, out_size);
+    }
+
+    StickId stick_id = StickId::Unknown;
+    if (token_iequals(arg, arg_len, "L") || token_iequals(arg, arg_len, "LEFT")) {
+      stick_id = StickId::Left;
+    } else if (token_iequals(arg, arg_len, "R") || token_iequals(arg, arg_len, "RIGHT")) {
+      stick_id = StickId::Right;
+    } else {
+      return format_error("role", "invalid_role", out, out_size);
+    }
+
+    if (!callbacks.on_set_stick_id(callbacks.ctx, stick_id)) {
+      return format_error("role", "role_change_failed", out, out_size);
+    }
+    size_t pos = 0;
+    if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"role\",\"ok\":true,\"role\":\"%s\"}\n", kResponsePrefix,
+                    static_cast<unsigned>(kProtocolVersion), stick_role_str(stick_id))) {
+      return 0;
+    }
+    return pos;
+  }
+
   if (token_equals(cmd_start, cmd_len, "reset")) {
     if (!has_no_trailing_tokens(p)) {
       return format_error("reset", "unexpected_args", out, out_size);
     }
+    bool reboot_required = false;
     if (callbacks.on_reset != nullptr) {
-      if (!callbacks.on_reset(callbacks.ctx)) {
+      if (!callbacks.on_reset(callbacks.ctx, reboot_required)) {
         return format_error("reset", "reset_failed", out, out_size);
       }
     } else {
       cfg = StickInputConfig{};
     }
     size_t pos = 0;
-    if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"reset\",\"ok\":true}\n", kResponsePrefix, static_cast<unsigned>(kProtocolVersion))) {
-      return 0;
+    if (reboot_required) {
+      if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"reset\",\"ok\":true,\"reboot\":true}\n", kResponsePrefix,
+                      static_cast<unsigned>(kProtocolVersion))) {
+        return 0;
+      }
+    } else {
+      if (!append_fmt(out, out_size, pos, "%s{\"v\":%u,\"cmd\":\"reset\",\"ok\":true}\n", kResponsePrefix, static_cast<unsigned>(kProtocolVersion))) {
+        return 0;
+      }
     }
     return pos;
   }

@@ -38,6 +38,27 @@
         <span class="badge">Firmware: <strong id="val-fw">—</strong></span>
         <span class="badge">Transports: <span id="val-transports" class="transport-pills">—</span></span>
       </div>
+      <div id="device-settings-row" class="device-settings-row hidden">
+        <div id="stick-dev-controls" class="device-controls hidden">
+          <label class="inline-field">Role
+            <select id="sel-stick-role">
+              <option value="L">Left Stick</option>
+              <option value="R">Right Stick</option>
+            </select>
+          </label>
+          <label class="inline-field">Transport Mode
+            <select id="sel-stick-mode"></select>
+          </label>
+        </div>
+        <div id="base-dev-controls" class="device-controls hidden">
+          <label class="inline-field">Output Mode
+            <select id="sel-base-mode">
+              <option value="DUAL">Dual (2x HID)</option>
+              <option value="COMBINED">Combined (1x HID)</option>
+            </select>
+          </label>
+        </div>
+      </div>
     </section>
 
     <section id="telemetry-panel" class="card telemetry-bar hidden">

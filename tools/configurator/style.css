@@ -89,6 +89,35 @@ body {
   font-size: 0.85rem;
 }
 
+.device-settings-row,
+.device-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.inline-field select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.22rem 0.4rem;
+  font-size: 0.82rem;
+}
+
 .btn {
   border: 1px solid var(--border);
   border-radius: 6px;

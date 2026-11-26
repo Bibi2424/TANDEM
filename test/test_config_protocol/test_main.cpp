@@ -106,7 +106,8 @@ void test_live_save_and_reset_callbacks() {
   ConfigCallbacks cbs{};
   cbs.ctx = &hook;
   cbs.on_live_changed = [](void* ctx, bool enabled) { static_cast<HookState*>(ctx)->live_enabled = enabled; };
-  cbs.on_reset = [](void* ctx) -> bool {
+  cbs.on_reset = [](void* ctx, bool& reboot_required) -> bool {
+    reboot_required = false;
     static_cast<HookState*>(ctx)->reset_calls++;
     return true;
   };
@@ -269,6 +270,123 @@ void test_caps_includes_webhid_transport() {
   TEST_ASSERT_NOT_NULL(std::strstr(out, "\"transports\":[\"USB_HID\",\"USB_SERIAL\",\"WEBHID\"]"));
 }
 
+void test_stick_mode_and_role_commands() {
+  struct HookState {
+    StickTransportMode last_mode{StickTransportMode::UsbHid};
+    StickId last_id{StickId::Left};
+    int mode_calls{0};
+    int role_calls{0};
+  } hook;
+
+  DeviceCapabilities caps{};
+  caps.board = "ESP32-S2";
+  caps.stick_id = StickId::Left;
+  caps.is_base_station = false;
+  caps.transports_mask = kTransportMaskUsbHid | kTransportMaskEspNowTx | kTransportMaskUsbSerial | kTransportMaskWebHid;
+
+  StickInputConfig cfg{};
+  ConfigCallbacks cbs{};
+  cbs.ctx = &hook;
+  cbs.on_set_transport_mode = [](void* ctx, StickTransportMode mode) -> bool {
+    auto* st = static_cast<HookState*>(ctx);
+    st->last_mode = mode;
+    st->mode_calls++;
+    return true;
+  };
+  cbs.on_set_stick_id = [](void* ctx, StickId id) -> bool {
+    auto* st = static_cast<HookState*>(ctx);
+    st->last_id = id;
+    st->role_calls++;
+    return true;
+  };
+
+  char out[kMaxResponseLength]{};
+
+  // Supported stick mode (case-insensitive) succeeds.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode espnow_tx", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"mode\",\"ok\":true,\"mode\":\"ESPNOW_TX\",\"reboot\":false"));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(StickTransportMode::EspNowTx), static_cast<uint8_t>(hook.last_mode));
+  TEST_ASSERT_EQUAL_INT(1, hook.mode_calls);
+
+  // Unsupported mode for S2 fails without invoking callback.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode BLE_HID", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"unsupported_mode\""));
+  TEST_ASSERT_EQUAL_INT(1, hook.mode_calls);
+
+  // Unknown mode name fails.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode BOGUS", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_mode\""));
+
+  // Missing or extra args fail.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_args\""));
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode USB_HID extra", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_args\""));
+
+  // Role updates (short & long tokens) succeed.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM role r", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"role\",\"ok\":true,\"role\":\"R\""));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(StickId::Right), static_cast<uint8_t>(hook.last_id));
+
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM role left", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"role\",\"ok\":true,\"role\":\"L\""));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(StickId::Left), static_cast<uint8_t>(hook.last_id));
+  TEST_ASSERT_EQUAL_INT(2, hook.role_calls);
+
+  // Invalid role fails.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM role CENTER", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_role\""));
+}
+
+void test_base_station_mode_and_reset_reboot_flag() {
+  struct HookState {
+    BaseOutputMode mode{BaseOutputMode::Dual};
+  } hook;
+
+  DeviceCapabilities caps{};
+  caps.board = "ESP32-S2";
+  caps.is_base_station = true;
+  caps.has_config = false;
+
+  StickInputConfig cfg{};
+  ConfigCallbacks cbs{};
+  cbs.ctx = &hook;
+  cbs.on_set_base_mode = [](void* ctx, BaseOutputMode mode, bool& reboot_required) -> bool {
+    auto* st = static_cast<HookState*>(ctx);
+    reboot_required = (st->mode != mode);
+    st->mode = mode;
+    return true;
+  };
+  cbs.on_reset = [](void* ctx, bool& reboot_required) -> bool {
+    auto* st = static_cast<HookState*>(ctx);
+    reboot_required = (st->mode != BaseOutputMode::Dual);
+    st->mode = BaseOutputMode::Dual;
+    return true;
+  };
+
+  char out[kMaxResponseLength]{};
+
+  // Switch Dual -> Combined triggers reboot:true.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode combined", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"mode\",\"ok\":true,\"mode\":\"ESPNOW_RX_COMBINED\",\"reboot\":true"));
+
+  // Selecting active mode again reports reboot:false.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode ESPNOW_RX_COMBINED", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"mode\",\"ok\":true,\"mode\":\"ESPNOW_RX_COMBINED\",\"reboot\":false"));
+
+  // Stick transport mode rejected on Base Station.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM mode USB_HID", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"invalid_mode\""));
+
+  // Role command unsupported on Base Station.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM role L", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"ok\":false,\"err\":\"unsupported\""));
+
+  // Reset from Combined back to Dual emits reboot:true.
+  TEST_ASSERT_GREATER_THAN(0, process_command("$TANDEM reset", caps, cfg, cbs, out, sizeof(out)));
+  TEST_ASSERT_NOT_NULL(std::strstr(out, "\"cmd\":\"reset\",\"ok\":true,\"reboot\":true"));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_caps_response_formats_all_fields);
@@ -280,5 +398,7 @@ int main() {
   RUN_TEST(test_status_command_formats_telemetry_and_rejects_args);
   RUN_TEST(test_live_response_with_partial_telemetry);
   RUN_TEST(test_caps_includes_webhid_transport);
+  RUN_TEST(test_stick_mode_and_role_commands);
+  RUN_TEST(test_base_station_mode_and_reset_reboot_flag);
   return UNITY_END();
 }

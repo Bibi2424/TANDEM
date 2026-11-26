@@ -14,19 +14,24 @@
 
 namespace tandem::base_usb {
 
-inline constexpr bool kCombinedMode = (TANDEM_BASE_COMBINED_MODE != 0);
+inline constexpr bool kDefaultCombinedMode = (TANDEM_BASE_COMBINED_MODE != 0);
 inline constexpr uint16_t kUsbVid = 0x303AU;
-inline constexpr uint16_t kUsbPid = kCombinedMode ? 0x80C5U : 0x80C4U;
-inline constexpr const char* kHidInterfaceName = kCombinedMode ? "TANDEM Combined Stick" : "TANDEM Base Station";
+inline constexpr uint16_t kUsbPidDual = 0x80C4U;
+inline constexpr uint16_t kUsbPidCombined = 0x80C5U;
 
 inline constexpr uint8_t kReportIdLeft = 1U;
 inline constexpr uint8_t kReportIdRight = 2U;
-inline constexpr size_t kJoystickDescriptorBytes =
-    kCombinedMode ? tandem::kHidJoystickReportDescriptorBytes : (tandem::kHidJoystickReportDescriptorBytes * 2U);
-inline constexpr size_t kReportDescriptorBytes = kJoystickDescriptorBytes + tandem::config::kHidConfigReportDescriptorBytes;
+inline constexpr size_t kDualReportDescriptorBytes =
+    (tandem::kHidJoystickReportDescriptorBytes * 2U) + tandem::config::kHidConfigReportDescriptorBytes;
+inline constexpr size_t kCombinedReportDescriptorBytes = tandem::kHidJoystickReportDescriptorBytes + tandem::config::kHidConfigReportDescriptorBytes;
+
+bool is_combined_mode() noexcept;
+uint16_t usb_pid() noexcept;
+const char* hid_interface_name() noexcept;
+size_t report_descriptor_bytes() noexcept;
 
 /// Initializes USB identity and starts the TinyUSB composite HID+CDC device.
-void begin() noexcept;
+void begin(bool combined_mode) noexcept;
 
 /// Sends a standard 21-byte HID Joystick input report for `report_id`.
 bool send_joystick(uint8_t report_id, const tandem::StickState& state) noexcept;
@@ -42,5 +47,6 @@ void drain_config_commands(Handler&& on_command) noexcept {
 bool send_config_response(uint8_t seq, const char* data, size_t len) noexcept;
 bool send_config_live(const char* data, size_t len) noexcept;
 bool poll_config_tx(uint32_t now_ms, bool& stalled_out) noexcept;
+bool has_config_tx_pending() noexcept;
 
 }  // namespace tandem::base_usb

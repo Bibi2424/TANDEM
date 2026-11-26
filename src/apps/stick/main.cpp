@@ -7,10 +7,12 @@
 #include "stick_mode.h"
 #include "stick_transport.h"
 #include "tandem/config_protocol.h"
+#include "tandem/config_storage.h"
 #include "tandem/core_info.h"
 #include "tandem/input_pipeline.h"
 #include "tandem/synthetic_input.h"
 #include "tandem/types.h"
+#include "tandem_hal/boot_button.h"
 #include "tandem_hal/config_nvs.h"
 #include "tandem_hal/input_scanner.h"
 #include "transport_ble_config.h"
@@ -57,13 +59,14 @@ constexpr uint32_t kStatusIntervalMs = 2000;
 constexpr uint32_t kLiveStreamIntervalMs = 33;
 constexpr uint32_t kLedSynthIntervalMs = 250;
 constexpr uint32_t kLedLiveIntervalMs = 1000;
-constexpr uint32_t kButtonDebounceMs = 30;
-constexpr uint32_t kLongPressMs = 1000;
 constexpr uint32_t kUsbSerialWaitMs = 1500;
+constexpr tandem::BoardTransportCaps kBoardCaps{tandem::board::kHasNativeUsb, tandem::board::kHasBle, tandem::board::kHasEspNow};
 
 tandem::hal::InputScanner g_scanner;
 tandem::hal::InputScannerConfig g_scanner_config{};
+tandem::hal::BootButton g_boot_button;
 tandem::StickInputConfig g_input_config{};
+tandem::DeviceSettings g_device_settings{};
 
 #if TANDEM_CAP_NATIVE_USB
 tandem::stick::UsbHidTransport g_usb_transport;
@@ -113,11 +116,27 @@ bool g_cmd_reading_line = false;
 tandem::RawStickInput g_last_raw{};
 tandem::StickState g_last_state = tandem::make_centered_state(tandem::kStateFlagConnected);
 
-bool g_boot_stable_pressed = false;
-bool g_boot_last_raw_pressed = false;
-uint32_t g_boot_last_change_ms = 0;
-uint32_t g_boot_press_start_ms = 0;
-bool g_boot_long_fired = false;
+bool g_pending_mode_switch = false;
+StickTransportMode g_pending_mode_target = tandem::stick::default_transport_mode();
+bool g_pending_mode_persist = false;
+uint32_t g_pending_mode_start_ms = 0;
+uint32_t g_pending_mode_delay_ms = 0;
+
+tandem::DeviceSettings make_default_device_settings() noexcept {
+  tandem::DeviceSettings defaults{};
+  defaults.transport_mode = tandem::stick::default_transport_mode();
+  defaults.stick_id = kDefaultStickId;
+  defaults.base_mode = tandem::BaseOutputMode::Dual;
+  return defaults;
+}
+
+void schedule_mode_switch(StickTransportMode target, bool persist, uint32_t delay_ms) noexcept {
+  g_pending_mode_switch = true;
+  g_pending_mode_target = target;
+  g_pending_mode_persist = persist;
+  g_pending_mode_start_ms = millis();
+  g_pending_mode_delay_ms = delay_ms;
+}
 
 StickTransport* transport_for_mode(StickTransportMode mode) noexcept {
   switch (mode) {
@@ -169,7 +188,7 @@ void emit_unsolicited_caps_if_streaming() noexcept {
   }
 }
 
-void switch_transport_mode(StickTransportMode target) noexcept {
+void switch_transport_mode(StickTransportMode target, bool persist = true) noexcept {
   if (!tandem::stick::is_mode_supported(target)) {
     Serial.printf("[stick] ERROR: mode %s is not supported on %s\n", tandem::stick::mode_name(target), tandem::board::kBoardName);
     return;
@@ -197,6 +216,10 @@ void switch_transport_mode(StickTransportMode target) noexcept {
   g_measured_sample_hz = 0;
   g_measured_tx_hz = 0;
   if (ok) {
+    g_device_settings.transport_mode = g_mode;
+    if (persist && !tandem::hal::save_device_settings(g_device_settings)) {
+      Serial.println("[stick] WARNING: failed to save mode to NVS");
+    }
     if (g_transport->device_name() != nullptr) {
       Serial.printf("[stick] mode -> %s (%s, ok)\n", tandem::stick::mode_name(g_mode), g_transport->device_name());
     } else {
@@ -206,6 +229,28 @@ void switch_transport_mode(StickTransportMode target) noexcept {
   } else {
     Serial.printf("[stick] ERROR: failed to start mode %s\n", tandem::stick::mode_name(g_mode));
   }
+}
+
+bool set_stick_role(tandem::StickId target, bool persist) noexcept {
+  if (!tandem::is_valid_stick_id(target)) {
+    return false;
+  }
+  const bool changed = (g_stick_id != target);
+  g_stick_id = target;
+  g_device_settings.stick_id = target;
+  if (changed && g_transport != nullptr) {
+    g_transport->on_stick_id_changed();
+  }
+  bool saved = true;
+  if (persist) {
+    saved = tandem::hal::save_device_settings(g_device_settings);
+    if (!saved) {
+      Serial.println("[stick] WARNING: failed to save role to NVS");
+    }
+  }
+  Serial.printf("[stick] id -> %s\n", (g_stick_id == tandem::StickId::Left) ? "LEFT" : "RIGHT");
+  emit_unsolicited_caps_if_streaming();
+  return saved;
 }
 
 tandem::config::TelemetrySnapshot build_telemetry() noexcept {
@@ -297,11 +342,45 @@ void handle_config_line(const char* line, ConfigChannel channel = ConfigChannel:
     }
     g_last_live_ms = millis();
   };
-  cbs.on_save = [](void*) -> bool { return tandem::hal::save_stick_config(g_input_config); };
-  cbs.on_reset = [](void*) -> bool {
+  cbs.on_save = [](void*) -> bool { return tandem::hal::save_stick_config(g_input_config) && tandem::hal::save_device_settings(g_device_settings); };
+  cbs.on_reset = [](void* ctx, bool& reboot_required) -> bool {
+    reboot_required = false;
+    const auto ch = (ctx != nullptr) ? static_cast<const CallbackContext*>(ctx)->channel : ConfigChannel::Serial;
     g_input_config = tandem::hal::make_default_input_config(g_scanner_config);
-    return tandem::hal::reset_stick_config();
+    const bool cfg_reset_ok = tandem::hal::reset_stick_config();
+    const tandem::DeviceSettings defaults = make_default_device_settings();
+    g_device_settings = defaults;
+    const bool dev_reset_ok = tandem::hal::reset_device_settings();
+    set_stick_role(defaults.stick_id, false);
+    if (g_mode != defaults.transport_mode && ch != ConfigChannel::Ble) {
+      const uint32_t delay_ms = (ch == ConfigChannel::WebHid) ? 50U : 0U;
+      schedule_mode_switch(defaults.transport_mode, false, delay_ms);
+    }
+    return cfg_reset_ok && dev_reset_ok;
   };
+  cbs.on_set_transport_mode = [](void* ctx, StickTransportMode mode) -> bool {
+    const auto ch = (ctx != nullptr) ? static_cast<const CallbackContext*>(ctx)->channel : ConfigChannel::Serial;
+    if (!tandem::stick::is_mode_supported(mode)) {
+      return false;
+    }
+    tandem::DeviceSettings next = g_device_settings;
+    next.transport_mode = mode;
+    if (!tandem::hal::save_device_settings(next)) {
+      return false;
+    }
+    g_device_settings = next;
+    if (mode != g_mode) {
+      uint32_t delay_ms = 0U;
+      if (ch == ConfigChannel::Ble) {
+        delay_ms = 250U;
+      } else if (ch == ConfigChannel::WebHid) {
+        delay_ms = 50U;
+      }
+      schedule_mode_switch(mode, false, delay_ms);
+    }
+    return true;
+  };
+  cbs.on_set_stick_id = [](void*, tandem::StickId stick_id) -> bool { return set_stick_role(stick_id, true); };
   cbs.on_get_telemetry = [](void*, tandem::config::TelemetrySnapshot& out) -> bool {
     out = build_telemetry();
     return true;
@@ -365,12 +444,8 @@ void poll_controls(uint32_t now_ms) noexcept {
     } else if (ch == '4') {
       switch_transport_mode(StickTransportMode::BleConfig);
     } else if (ch == 'i' || ch == 'I') {
-      g_stick_id = (g_stick_id == tandem::StickId::Left) ? tandem::StickId::Right : tandem::StickId::Left;
-      if (g_transport != nullptr) {
-        g_transport->on_stick_id_changed();
-      }
-      Serial.printf("[stick] id -> %s\n", (g_stick_id == tandem::StickId::Left) ? "LEFT" : "RIGHT");
-      emit_unsolicited_caps_if_streaming();
+      const tandem::StickId next_id = (g_stick_id == tandem::StickId::Left) ? tandem::StickId::Right : tandem::StickId::Left;
+      set_stick_role(next_id, true);
     } else if (ch != '\r' && ch != '\n') {
       Serial.printf("[stick] ERROR: unknown command '%c' (use t/m/1/2/3/4/i)\n", (ch >= 32 && ch < 127) ? static_cast<char>(ch) : '?');
     }
@@ -399,23 +474,11 @@ void poll_controls(uint32_t now_ms) noexcept {
   g_usb_transport.drain_config_commands([](const char* hid_cmd, uint8_t hid_seq) { handle_config_line(hid_cmd, ConfigChannel::WebHid, hid_seq); });
 #endif
 
-  const bool raw_pressed = (digitalRead(tandem::board::kPinBootButton) == LOW);
-  if (raw_pressed != g_boot_last_raw_pressed) {
-    g_boot_last_raw_pressed = raw_pressed;
-    g_boot_last_change_ms = now_ms;
-  } else if (raw_pressed != g_boot_stable_pressed && static_cast<uint32_t>(now_ms - g_boot_last_change_ms) >= kButtonDebounceMs) {
-    g_boot_stable_pressed = raw_pressed;
-    if (g_boot_stable_pressed) {
-      g_boot_press_start_ms = now_ms;
-      g_boot_long_fired = false;
-    } else if (!g_boot_long_fired) {
-      g_synthetic_enabled = !g_synthetic_enabled;
-      Serial.printf("[stick] BOOT short -> input %s\n", g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
-    }
-  }
-
-  if (g_boot_stable_pressed && !g_boot_long_fired && static_cast<uint32_t>(now_ms - g_boot_press_start_ms) >= kLongPressMs) {
-    g_boot_long_fired = true;
+  const tandem::hal::ButtonEvent boot_ev = g_boot_button.poll(now_ms);
+  if (boot_ev == tandem::hal::ButtonEvent::ShortPress) {
+    g_synthetic_enabled = !g_synthetic_enabled;
+    Serial.printf("[stick] BOOT short -> input %s\n", g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
+  } else if (boot_ev == tandem::hal::ButtonEvent::LongPress) {
     switch_transport_mode(tandem::stick::next_supported_mode(g_mode));
   }
 }
@@ -440,12 +503,19 @@ void setup() {
     pinMode(tandem::board::kPinStatusLed, OUTPUT);
     digitalWrite(tandem::board::kPinStatusLed, LOW);
   }
-  pinMode(tandem::board::kPinBootButton, INPUT_PULLUP);
+  g_boot_button.init(tandem::board::kPinBootButton);
 
   g_scanner_config = tandem::board::make_default_scanner_config();
   g_scanner.init(g_scanner_config);
   g_input_config = tandem::hal::make_default_input_config(g_scanner_config);
   const tandem::hal::NvsLoadStatus nvs_status = tandem::hal::load_stick_config(g_input_config);
+
+  const tandem::DeviceSettings default_dev = make_default_device_settings();
+  g_device_settings = default_dev;
+  const tandem::hal::NvsLoadStatus dev_nvs_status = tandem::hal::load_device_settings(g_device_settings);
+  g_device_settings = tandem::clamp_device_settings(g_device_settings, kBoardCaps, default_dev);
+  g_mode = g_device_settings.transport_mode;
+  g_stick_id = g_device_settings.stick_id;
 
 #if TANDEM_CAP_NATIVE_USB
   // Initialize USB composite CDC+HID once at boot so Serial remains available
@@ -488,6 +558,7 @@ void setup() {
   Serial.printf("Stick ID   : %s\n", (g_stick_id == tandem::StickId::Left) ? "LEFT (1)" : "RIGHT (2)");
   Serial.printf("Input      : %s\n", g_synthetic_enabled ? "SYNTHETIC" : "LIVE");
   Serial.printf("Config NVS : %s\n", tandem::hal::nvs_load_status_name(nvs_status));
+  Serial.printf("Dev NVS    : %s\n", tandem::hal::nvs_load_status_name(dev_nvs_status));
   Serial.println("Controls   : 't'/BOOT-short = LIVE<->SYNTH | 'm'/BOOT-long = next mode | '1'/'2'/'3'/'4' = USB/BLE/ESP-NOW/BLE-CFG | 'i' = L<->R");
 
   g_last_tx_us = micros();
@@ -500,6 +571,11 @@ void loop() {
   const uint32_t now_ms = millis();
 
   poll_controls(now_ms);
+
+  if (g_pending_mode_switch && static_cast<uint32_t>(now_ms - g_pending_mode_start_ms) >= g_pending_mode_delay_ms) {
+    g_pending_mode_switch = false;
+    switch_transport_mode(g_pending_mode_target, g_pending_mode_persist);
+  }
 
   // Sample micros() after poll_controls() so a mode switch doesn't cause unsigned underflow.
   const uint32_t now_us = micros();
@@ -518,7 +594,7 @@ void loop() {
       }
       ++g_sample_count;
 
-      if (g_transport->send(g_stick_id, g_last_state)) {
+      if (!g_pending_mode_switch && g_transport->send(g_stick_id, g_last_state)) {
         ++g_tx_count;
       }
     }

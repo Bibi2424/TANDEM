@@ -103,7 +103,18 @@ T.A.N.D.E.M. enforces **strictly mutually exclusive wireless stacks** — switch
 | Serial **`2`** | Switch to **`BLE_HID`** | BLE boards only (`ESP32-WROOM`, `ESP32-S3`) |
 | Serial **`3`** | Switch to **`ESPNOW_TX`** | All stick targets |
 | Serial **`4`** | Switch to **`BLE_CFG`** | BLE boards only (`ESP32-WROOM`, `ESP32-S3`) |
-| Serial **`i`** | Flip Stick ID **`LEFT` <-> `RIGHT`** | Runtime toggle for testing; restarts/updates active radio identity |
+| Serial **`i`** | Flip Stick ID **`LEFT` <-> `RIGHT`** | Persists to NVS (`"dev_cfg"`); restarts/updates active radio identity |
+
+### Base Station Controls (`BOOT` Button & 115200 Serial)
+
+| Trigger | Action | Notes |
+| :--- | :--- | :--- |
+| **`BOOT` long press** (`>= 1 s`) or **`m`** | Toggle **`Dual` <-> `Combined`** | Persists to NVS (`"dev_cfg"`) and reboots to re-enumerate USB HID |
+| Serial **`1`** / **`2`** | Select **`Dual` (`1`)** or **`Combined` (`2`)** | Persists to NVS and reboots when changing descriptor layout |
+| Web Configurator / `$TANDEM mode <DUAL\|COMBINED>` | Select Base Station output mode | `Reset Defaults` clears NVS back to board/build default |
+
+> [!NOTE]
+> Stick transport mode, Left/Right role, and Base Station output mode persist automatically in ESP32 NVS (`"tandem"` / `"dev_cfg"`) across power cycles and can also be updated from the Web Configurator top status bar (`$TANDEM mode` / `$TANDEM role`).
 
 ### Mode Cycle Order per Board
 
@@ -142,9 +153,8 @@ Open **[https://bibi2424.github.io/TANDEM/](https://bibi2424.github.io/TANDEM/)*
    - Adjust **Deadzone**, **Invert**, and response **Curve** (`Linear` or `Expo` blend) per axis.
    - Click **Apply All Axes** to preview changes in RAM on the device.
 3. **Persist to Flash (NVS):**
-   - Click **Save to Flash** to store the CRC-32-validated `StickInputConfig` in ESP32 NVS (`"tandem"` / `"stick_cfg"`).
-   - Power-cycle the board and confirm the boot banner reports `Config NVS : loaded`. Click **Reset Defaults** at any time to clear NVS and restore defaults.
-   - *(Note: Calibration, deadzone, invert, and curve settings persist across power cycles today; persisting runtime transport mode, Left/Right stick role, and Base Station mode is tracked separately in Issue **#74**.)*
+   - Click **Save to Flash** to store the CRC-32-validated `StickInputConfig` (`"tandem"` / `"stick_cfg"`) and `DeviceSettings` (`"tandem"` / `"dev_cfg"`) in ESP32 NVS (runtime **Role**, **Transport Mode**, and **Base Station Output Mode** changes also auto-persist to NVS immediately).
+   - Power-cycle the board and confirm the boot banner reports `Config NVS : loaded` / `Dev NVS : loaded`. Click **Reset Defaults** at any time to clear NVS and restore defaults.
 4. **Verify Live Behavior (**Live Tester (joy.cpl)** tab):**
    - Switch between **Browser Gamepad API** (OS HID view) and **Device Stream** (`@TANDEM` live telemetry showing raw ADC vs shaped output, 2D X/Y crosshair, circularity trace, rest offset, ADC noise floor, buttons, and POV hat).
    - Connecting to a **Base Station** displays live dual/combined telemetry and a read-only calibration banner — connect directly to each stick to tune and save NVS settings.

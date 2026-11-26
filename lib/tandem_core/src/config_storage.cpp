@@ -9,6 +9,7 @@ namespace {
 constexpr uint8_t kFlagEnabled = 0x01U;
 constexpr uint8_t kFlagInvert = 0x02U;
 constexpr size_t kCrcPayloadBytes = kPersistedConfigBytes - kConfigTrailerBytes;
+constexpr size_t kDeviceSettingsCrcPayloadBytes = kPersistedDeviceSettingsBytes - kDeviceSettingsTrailerBytes;
 
 void write_u16_le(uint8_t* dst, uint16_t val) noexcept {
   dst[0] = static_cast<uint8_t>(val & 0xFFU);
@@ -196,6 +197,99 @@ const char* config_decode_result_name(ConfigDecodeResult result) noexcept {
     default:
       return "unknown";
   }
+}
+
+bool is_valid_device_settings(const DeviceSettings& settings) noexcept {
+  return is_valid_transport_mode(settings.transport_mode) && is_valid_stick_id(settings.stick_id) && is_valid_base_mode(settings.base_mode);
+}
+
+DeviceSettings clamp_device_settings(const DeviceSettings& settings, const BoardTransportCaps& caps, const DeviceSettings& defaults) noexcept {
+  DeviceSettings clamped = settings;
+
+  if (!is_valid_transport_mode(clamped.transport_mode) || !is_transport_mode_supported(clamped.transport_mode, caps)) {
+    if (is_valid_transport_mode(defaults.transport_mode) && is_transport_mode_supported(defaults.transport_mode, caps)) {
+      clamped.transport_mode = defaults.transport_mode;
+    } else {
+      constexpr StickTransportMode kFallbackOrder[4] = {
+          StickTransportMode::UsbHid,
+          StickTransportMode::BleHid,
+          StickTransportMode::EspNowTx,
+          StickTransportMode::BleConfig,
+      };
+      clamped.transport_mode = StickTransportMode::UsbHid;
+      for (const StickTransportMode candidate : kFallbackOrder) {
+        if (is_transport_mode_supported(candidate, caps)) {
+          clamped.transport_mode = candidate;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!is_valid_stick_id(clamped.stick_id)) {
+    clamped.stick_id = is_valid_stick_id(defaults.stick_id) ? defaults.stick_id : StickId::Left;
+  }
+
+  if (!is_valid_base_mode(clamped.base_mode)) {
+    clamped.base_mode = is_valid_base_mode(defaults.base_mode) ? defaults.base_mode : BaseOutputMode::Dual;
+  }
+
+  return clamped;
+}
+
+bool encode_device_settings(const DeviceSettings& settings, PersistedDeviceSettingsBlob& out) noexcept {
+  if (!is_valid_device_settings(settings)) {
+    return false;
+  }
+
+  std::memset(out.bytes, 0, sizeof(out.bytes));
+  out.bytes[0] = kDeviceSettingsMagic0;
+  out.bytes[1] = kDeviceSettingsMagic1;
+  out.bytes[2] = kDeviceSettingsMagic2;
+  out.bytes[3] = kDeviceSettingsMagic3;
+  write_u16_le(&out.bytes[4], kDeviceSettingsStorageVersion);
+  write_u16_le(&out.bytes[6], 0U);
+  out.bytes[8] = static_cast<uint8_t>(settings.transport_mode);
+  out.bytes[9] = static_cast<uint8_t>(settings.stick_id);
+  out.bytes[10] = static_cast<uint8_t>(settings.base_mode);
+  out.bytes[11] = 0U;
+
+  const uint32_t crc = crc32_ieee(out.bytes, kDeviceSettingsCrcPayloadBytes);
+  write_u32_le(&out.bytes[kDeviceSettingsCrcPayloadBytes], crc);
+  return true;
+}
+
+ConfigDecodeResult decode_device_settings(const uint8_t* data, size_t len, DeviceSettings& out) noexcept {
+  if (data == nullptr || len != kPersistedDeviceSettingsBytes) {
+    return ConfigDecodeResult::InvalidLength;
+  }
+
+  if (data[0] != kDeviceSettingsMagic0 || data[1] != kDeviceSettingsMagic1 || data[2] != kDeviceSettingsMagic2 || data[3] != kDeviceSettingsMagic3) {
+    return ConfigDecodeResult::BadMagic;
+  }
+
+  const uint16_t version = read_u16_le(&data[4]);
+  if (version != kDeviceSettingsStorageVersion) {
+    return ConfigDecodeResult::UnsupportedVersion;
+  }
+
+  const uint32_t expected_crc = crc32_ieee(data, kDeviceSettingsCrcPayloadBytes);
+  const uint32_t stored_crc = read_u32_le(&data[kDeviceSettingsCrcPayloadBytes]);
+  if (stored_crc != expected_crc) {
+    return ConfigDecodeResult::BadCrc;
+  }
+
+  DeviceSettings decoded{};
+  decoded.transport_mode = static_cast<StickTransportMode>(data[8]);
+  decoded.stick_id = static_cast<StickId>(data[9]);
+  decoded.base_mode = static_cast<BaseOutputMode>(data[10]);
+
+  if (!is_valid_device_settings(decoded)) {
+    return ConfigDecodeResult::InvalidConfig;
+  }
+
+  out = decoded;
+  return ConfigDecodeResult::Ok;
 }
 
 }  // namespace tandem
