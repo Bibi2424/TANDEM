@@ -8,6 +8,7 @@
 #include <BLESecurity.h>
 #include <BLEServer.h>
 #include <esp_mac.h>
+#include <esp_timer.h>
 
 #include <cstdio>
 #include <cstring>
@@ -23,6 +24,7 @@ constexpr const char* kDeviceNamePrefix = "TANDEM-BLE";
 constexpr size_t kMaxDeviceNameBytes = 32;
 constexpr const char* kManufacturer = "T.A.N.D.E.M.";
 constexpr uint16_t kBleMtuBytes = 64;
+constexpr int64_t kBleHidKeepaliveUs = 250000;  // 250 ms keepalive when idle
 
 class ServerCallbacks final : public BLEServerCallbacks {
  public:
@@ -45,6 +47,10 @@ void BleHidTransport::on_connect_cb() noexcept {
 }
 
 void BleHidTransport::on_disconnect_cb() noexcept {
+  // Release Bluedroid's static m_authCompleteSemaphore if the peer disconnected
+  // before ESP_GAP_BLE_AUTH_CMPL_EVT fired, preventing BTC_TASK deadlock on reconnect.
+  BLESecurity::signalAuthenticationComplete();
+  BLESecurity::resetSecurity();
   ble_connected_.store(false, std::memory_order_release);
   ble_restart_adv_.store(true, std::memory_order_release);
 }
@@ -68,8 +74,15 @@ bool BleHidTransport::init_ble_stack() noexcept {
 #endif
   BLEDevice::setMTU(kBleMtuBytes);
 
+  // Work around Arduino-ESP32 BLESecurity retaining static state (including
+  // Bluedroid's m_authCompleteSemaphore) across BLEDevice::deinit() and
+  // disconnects where ESP_GAP_BLE_AUTH_CMPL_EVT never fired.
+  BLESecurity::signalAuthenticationComplete();
+  BLESecurity::resetSecurity();
+  BLESecurity::setForceAuthentication(true);
   BLESecurity::setAuthenticationMode(true, false, true);
   BLESecurity::setCapability(ESP_IO_CAP_NONE);
+  BLESecurity::setKeySize(16);
   BLESecurity::setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
   BLESecurity::setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
 
@@ -128,6 +141,8 @@ bool BleHidTransport::start() noexcept {
 
   ble_connected_.store(false, std::memory_order_release);
   ble_restart_adv_.store(false, std::memory_order_release);
+  has_last_report_ = false;
+  last_notify_us_ = 0;
 
   if (!init_ble_stack()) {
     return false;
@@ -155,16 +170,24 @@ void BleHidTransport::stop() noexcept {
     g_hid = nullptr;
     g_input_report = nullptr;
     BLEDevice::deinit(false);
+    BLESecurity::signalAuthenticationComplete();
+    BLESecurity::resetSecurity();
     stack_initialized_ = false;
   }
   ble_connected_.store(false, std::memory_order_release);
   ble_restart_adv_.store(false, std::memory_order_release);
+  has_last_report_ = false;
+  last_notify_us_ = 0;
   active_ = false;
 }
 
 void BleHidTransport::poll() noexcept {
   if (!active_) {
     return;
+  }
+  if (!connected()) {
+    has_last_report_ = false;
+    last_notify_us_ = 0;
   }
   if (ble_restart_adv_.exchange(false, std::memory_order_acq_rel)) {
     BLEDevice::startAdvertising();
@@ -180,6 +203,14 @@ bool BleHidTransport::send(tandem::StickId, const tandem::StickState& state) noe
     return false;
   }
   const tandem::HidJoystickReport report = tandem::encode_hid_joystick_report(state);
+  const int64_t now_us = esp_timer_get_time();
+  const bool unchanged = has_last_report_ && (std::memcmp(report.bytes, last_report_.bytes, sizeof(report.bytes)) == 0);
+  if (unchanged && (now_us - last_notify_us_) < kBleHidKeepaliveUs) {
+    return false;
+  }
+  last_report_ = report;
+  has_last_report_ = true;
+  last_notify_us_ = now_us;
   g_input_report->setValue(report.bytes, sizeof(report.bytes));
   g_input_report->notify();
   ++sent_;

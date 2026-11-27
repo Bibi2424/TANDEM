@@ -125,7 +125,7 @@ T.A.N.D.E.M. enforces **strictly mutually exclusive wireless stacks** — switch
 ### Transport Mode Details
 
 - **`USB_HID` (Wired USB):** Enumerates as composite `TANDEM-Stick-XXXX` providing a 32-button, 8-axis, POV-hat USB HID joystick, a vendor **WebHID** configuration endpoint, and **USB CDC serial** (`115200` baud). CDC remains active even if switched to `ESPNOW_TX` or wireless modes.
-- **`BLE_HID` (Direct Bluetooth Gamepad):** Advertises as `TANDEM-BLE-XXXX` for OS pairing in Windows/macOS/Linux Bluetooth settings.
+- **`BLE_HID` (Direct Bluetooth Gamepad):** Advertises as `TANDEM-BLE-XXXX` for OS pairing in Windows/macOS/Linux Bluetooth settings. Flashing a `0x0` merged binary erases ESP32 NVS (including stored BLE bonds), so remove and re-pair any previously paired `TANDEM-BLE-XXXX` stick in OS Bluetooth settings after a `0x0` flash.
 - **`BLE_CFG` (Web Bluetooth Tuning):** Stops `BLE_HID` / ESP-NOW and advertises as `TANDEM-CFG-XXXX` using the custom T.A.N.D.E.M. GATT service. Connect directly inside Chrome/Edge via **Connect BLE** — **do not** pair `TANDEM-CFG-...` in Windows Bluetooth Settings.
 - **`ESPNOW_TX` + USB Base Station *(Experimental in `v0.1.0-alpha`)*:**
   > [!WARNING]
