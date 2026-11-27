@@ -6,6 +6,7 @@
 #include <BLE2902.h>
 #endif
 #include <BLEDevice.h>
+#include <BLESecurity.h>
 #include <BLEServer.h>
 #include <esp_mac.h>
 #include <freertos/FreeRTOS.h>
@@ -160,6 +161,14 @@ bool BleConfigTransport::init_ble_stack() noexcept {
 #endif
   BLEDevice::setMTU(kBleConfigMtuBytes);
 
+  // Explicitly disable BLE SMP security in config mode so static BLESecurity
+  // state from a prior BLE_HID session cannot force encryption/bonding or
+  // take Bluedroid's auth semaphore on unbonded Web Bluetooth connections.
+  BLESecurity::signalAuthenticationComplete();
+  BLESecurity::resetSecurity();
+  BLESecurity::setForceAuthentication(false);
+  BLESecurity::setAuthenticationMode(false, false, false);
+
   BLEServer* server = BLEDevice::createServer();
   if (server == nullptr) {
     BLEDevice::deinit(false);
@@ -256,6 +265,8 @@ void BleConfigTransport::stop() noexcept {
     g_resp_char = nullptr;
     g_live_char = nullptr;
     BLEDevice::deinit(false);
+    BLESecurity::signalAuthenticationComplete();
+    BLESecurity::resetSecurity();
     stack_initialized_ = false;
   }
   ble_connected_.store(false, std::memory_order_release);
