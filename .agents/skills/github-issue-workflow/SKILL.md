@@ -50,9 +50,9 @@ A human closes/merges the PR and notifies the agent. Once notified:
 
 ## 5. Release Milestones
 
-- **Single source of truth:** Native GitHub **Milestones** (e.g., `v0.1.0-alpha`, `v0.2.0-alpha`, `v0.3.0-beta`, `v1.0.0`, `v1.1.0`) track release targeting and feed GitHub Projects v2's built-in `Milestone` grouping (do not add `release:*` labels).
+- **Single source of truth:** Native GitHub **Milestones** track release and post-1.0 feature targeting and feed GitHub Projects v2's built-in `Milestone` grouping (do not add `release:*` labels). Pre-1.0 and `v1.0.0` use SemVer release milestones (`v0.1.0-alpha`, `v0.2.0-alpha`, `v0.3.0-beta`, `v1.0.0`), while post-1.0 work uses unversioned feature milestones (`Output Device Profiles`, `Node Graph & Dual-Stick Engine`) until release ordering is decided.
 - **What gets a Milestone:**
   - Assign Milestones to **Tasks** and **Bugs**.
-  - Leave multi-release umbrella **Features** (`#2`, `#6`, `#7`, `#8`) unmilestoned.
+  - Leave multi-release umbrella **Features** (`#2`, `#6`, `#7`, `#8`) and Features whose child Tasks carry the Milestone (`#92`, `#98`, `#99`) unmilestoned.
   - For unsplit future **Features** (`#51`, `#64`, `#72`, `#73`), keep a placeholder Milestone on the Feature until it is broken into Tasks — then assign the Milestones to the new Tasks and clear the Feature's Milestone if it spans releases.
 - **Tooling:** Assign an existing Milestone via `issue_write` (`milestone` field) or `gh api`; creating or closing Milestones (aligned 1-to-1 with Git tags / GitHub Releases, e.g., archiving `v0.0.0-prototype`) uses `gh api` (`repo` scope).
