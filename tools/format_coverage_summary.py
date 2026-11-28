@@ -336,7 +336,7 @@ def render_report(
         out.append(marker)
         out.append("")
 
-    out.append("## T.A.N.D.E.M. CI — Test & Coverage Report")
+    out.append("## Tandem Controls CI — Test & Coverage Report")
     out.append("")
 
     # Headline summary bullets

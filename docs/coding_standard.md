@@ -1,12 +1,12 @@
-# T.A.N.D.E.M. Coding Standard
+# Tandem Controls Coding Standard
 
-This document defines the C++17 coding and formatting conventions for T.A.N.D.E.M. (and lightweight formatting conventions for supporting web/Python tooling). Embedded architecture and real-time safety rules live in [AGENTS.md](../AGENTS.md).
+This document defines the C++17 coding and formatting conventions for Tandem Controls (and lightweight formatting conventions for supporting web/Python tooling). Embedded architecture and real-time safety rules live in [AGENTS.md](../AGENTS.md).
 
 ---
 
 ## 1. Base Standard & Automated Formatting
 
-T.A.N.D.E.M. C++ formatting derives from the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html) via `BasedOnStyle: Google` in [.clang-format](../.clang-format) (reference: [Clang-Format Style Options](https://clang.llvm.org/docs/ClangFormatStyleOptions.html)).
+Tandem Controls C++ formatting derives from the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html) via `BasedOnStyle: Google` in [.clang-format](../.clang-format) (reference: [Clang-Format Style Options](https://clang.llvm.org/docs/ClangFormatStyleOptions.html)).
 
 Only these explicit deviations from `BasedOnStyle: Google` are configured in [.clang-format](../.clang-format):
 
@@ -72,7 +72,7 @@ Shared editor whitespace/encoding defaults (UTF-8, `LF` line endings, final newl
 
 CI linting is scoped to C/C++; supporting web and Python files follow [.editorconfig](../.editorconfig) and these lightweight conventions:
 
-- **Web Configurator (`tools/configurator/` — JS, HTML, CSS):**
+- **Tandem Configurator (`tools/configurator/` — JS, HTML, CSS):**
   - 2-space indentation, `"use strict"`, double quotes, semicolons, trailing commas in multiline literals.
   - `camelCase` functions/variables, `PascalCase` classes, `SCREAMING_SNAKE_CASE` top-level constants; `const` by default (`let` only when reassigned, never `var`).
   - Lowercase HTML tags/attributes with double-quoted values; CSS `--kebab-case` custom properties in `:root`.

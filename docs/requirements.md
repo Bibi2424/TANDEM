@@ -1,14 +1,14 @@
-# **DIY Dual-Joystick Controller Requirements**
+# **Tandem Controls — Technical Requirements**
 
 # **Document Overview**
 
-This document outlines the technical baseline requirements for the hardware, firmware, communication transports, signal processing, and tooling of the DIY Dual-Joystick Controller system. Final MCU selection and mode unification remain open while individual transports and hardware options are explored.
+This document outlines the technical baseline requirements for the hardware, firmware, communication transports, signal processing, and tooling of **Tandem Controls** — a modular controller platform supporting single-stick, HOTAS, HOSAS, and custom hybrid rigs (button boxes, throttles, pedals). Final MCU selection and mode unification remain open while individual transports and hardware options are explored.
 
 ---
 
 # **1\. System & Hardware Architecture Requirements**
 
-* **Dual-Stick Matched Hardware:** Build two joysticks using matched microcontrollers with identical (or nearly identical) input hardware so the same firmware codebase can target both sticks without major forks. The final MCU is not locked in yet (**ESP32-S3** is currently a leading candidate, not a committed choice).
+* **Modular Single- & Dual-Stick Hardware:** Support both standalone single-device setups and multi-stick rigs (such as matched HOSAS joysticks or HOTAS/custom hybrid rigs) using compatible microcontrollers so the same firmware codebase serves all nodes without major forks. The final MCU is not locked in yet (**ESP32-S3** is currently a leading candidate, not a committed choice).
 * **Early Prototyping Hardware (Board-Dependent Feature Subsets):** Initial prototyping starts on available dev boards, with each board exercising the features its silicon supports:
   * **ESP32-S2:** Native USB + Wi-Fi/ESP-NOW (no BLE) — suitable for wired USB HID and USB base-station prototyping.
   * **ESP32-WROOM (classic ESP32):** BLE + Wi-Fi/ESP-NOW (no native USB) — suitable for BLE HID, BLE GATT configuration, and ESP-NOW stick prototyping.

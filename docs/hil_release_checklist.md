@@ -1,6 +1,6 @@
-# T.A.N.D.E.M. Release HIL Smoke-Test Checklist
+# Tandem Controls — Release HIL Smoke-Test Checklist
 
-Hardware-in-the-Loop (HIL) verification checklist required before cutting a tagged T.A.N.D.E.M. release (per [AGENTS.md](../AGENTS.md) HIL gate and [requirements.md](requirements.md) §5).
+Hardware-in-the-Loop (HIL) verification checklist required before cutting a tagged Tandem Controls release (per [AGENTS.md](../AGENTS.md) HIL gate and [requirements.md](requirements.md) §5).
 
 > **Rule:** Never mark on-hardware behavior as verified from host tests or compilation builds alone. Run every applicable physical check below on real boards and record pass/fail evidence before tagging.
 
@@ -106,7 +106,7 @@ Boards Tested   : <e.g. ESP32-S2 Mini, ESP32-WROOM x2, ESP32-S3 DevKitC-1>
 - [ ] Create and push annotated SemVer tag:
 
   ```bash
-  git tag -a v<version> -m "T.A.N.D.E.M. v<version>"
+  git tag -a v<version> -m "Tandem Controls v<version>"
   git push origin v<version>
   ```
 

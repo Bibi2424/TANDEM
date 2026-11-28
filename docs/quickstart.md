@@ -1,6 +1,6 @@
-# T.A.N.D.E.M. User Quick-Start Guide
+# Tandem Controls — User Quick-Start Guide
 
-This guide walks through flashing **T.A.N.D.E.M.** firmware, wiring and inspecting dev-board inputs, switching transport modes, and calibrating sticks in the Web Configurator.
+This guide walks through flashing **Tandem Controls** firmware, wiring and inspecting dev-board inputs, switching transport modes, and calibrating sticks in **Tandem Configurator**.
 
 > [!CAUTION]
 > **Power-Path Safety:** Never connect LiPo/Li-ion battery voltage directly to 5V USB `VBUS`. When powering sticks from a battery alongside USB, always use a proper LiPo/Li-ion charging, protection, and power-path management circuit.
@@ -9,7 +9,7 @@ This guide walks through flashing **T.A.N.D.E.M.** firmware, wiring and inspecti
 
 ## 1. Supported Prototyping Boards & Environments
 
-T.A.N.D.E.M. runs board-dependent feature subsets so prototypes can be exercised across available ESP32 hardware:
+Tandem Controls runs board-dependent feature subsets so prototypes can be exercised across available ESP32 hardware:
 
 | Board / MCU | Role | Capabilities | Default Mode | PlatformIO Env(s) | `esptool --chip` |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -27,7 +27,7 @@ T.A.N.D.E.M. runs board-dependent feature subsets so prototypes can be exercised
 
 GitHub Releases attach one merged, self-contained `.bin` per target (containing bootloader, partition table, `boot_app0`, and application) along with `SHA256SUMS.txt`.
 
-1. Download the `.bin` matching your board/role and `SHA256SUMS.txt` from [GitHub Releases](https://github.com/Bibi2424/TANDEM/releases).
+1. Download the `.bin` matching your board/role and `SHA256SUMS.txt` from [GitHub Releases](https://github.com/tandem-controls/tandem/releases).
 2. Verify download integrity and flash starting at offset **`0x0`**:
 
    ```bash
@@ -91,7 +91,7 @@ Default pin assignments live in [board_config.h](../include/boards/board_config.
 
 ## 4. Controls & Transport Mode Switching
 
-T.A.N.D.E.M. enforces **strictly mutually exclusive wireless stacks** — switching modes cleanly tears down the previous radio (`BLE` or `Wi-Fi/ESP-NOW`) before starting the next.
+Tandem Controls enforces **strictly mutually exclusive wireless stacks** — switching modes cleanly tears down the previous radio (`BLE` or `Wi-Fi/ESP-NOW`) before starting the next.
 
 ### Stick Controls (`BOOT` Button & 115200 Serial)
 
@@ -111,10 +111,10 @@ T.A.N.D.E.M. enforces **strictly mutually exclusive wireless stacks** — switch
 | :--- | :--- | :--- |
 | **`BOOT` long press** (`>= 1 s`) or **`m`** | Toggle **`Dual` <-> `Combined`** | Persists to NVS (`"dev_cfg"`) and reboots to re-enumerate USB HID |
 | Serial **`1`** / **`2`** | Select **`Dual` (`1`)** or **`Combined` (`2`)** | Persists to NVS and reboots when changing descriptor layout |
-| Web Configurator / `$TANDEM mode <DUAL\|COMBINED>` | Select Base Station output mode | `Reset Defaults` clears NVS back to board/build default |
+| Tandem Configurator / `$TANDEM mode <DUAL\|COMBINED>` | Select Base Station output mode | `Reset Defaults` clears NVS back to board/build default |
 
 > [!NOTE]
-> Stick transport mode, Left/Right role, and Base Station output mode persist automatically in ESP32 NVS (`"tandem"` / `"dev_cfg"`) across power cycles and can also be updated from the Web Configurator top status bar (`$TANDEM mode` / `$TANDEM role`).
+> Stick transport mode, Left/Right role, and Base Station output mode persist automatically in ESP32 NVS (`"tandem"` / `"dev_cfg"`) across power cycles and can also be updated from the Tandem Configurator top status bar (`$TANDEM mode` / `$TANDEM role`).
 
 ### Mode Cycle Order per Board
 
@@ -126,17 +126,17 @@ T.A.N.D.E.M. enforces **strictly mutually exclusive wireless stacks** — switch
 
 - **`USB_HID` (Wired USB):** Enumerates as composite `TANDEM-Stick-XXXX` providing a 32-button, 8-axis, POV-hat USB HID joystick, a vendor **WebHID** configuration endpoint, and **USB CDC serial** (`115200` baud). CDC remains active even if switched to `ESPNOW_TX` or wireless modes.
 - **`BLE_HID` (Direct Bluetooth Gamepad):** Advertises as `TANDEM-BLE-XXXX` for OS pairing in Windows/macOS/Linux Bluetooth settings. Flashing a `0x0` merged binary erases ESP32 NVS (including stored BLE bonds), so remove and re-pair any previously paired `TANDEM-BLE-XXXX` stick in OS Bluetooth settings after a `0x0` flash.
-- **`BLE_CFG` (Web Bluetooth Tuning):** Stops `BLE_HID` / ESP-NOW and advertises as `TANDEM-CFG-XXXX` using the custom T.A.N.D.E.M. GATT service. Connect directly inside Chrome/Edge via **Connect BLE** — **do not** pair `TANDEM-CFG-...` in Windows Bluetooth Settings.
+- **`BLE_CFG` (Web Bluetooth Tuning):** Stops `BLE_HID` / ESP-NOW and advertises as `TANDEM-CFG-XXXX` using the custom Tandem Controls GATT service. Connect directly inside Chrome/Edge via **Connect BLE** — **do not** pair `TANDEM-CFG-...` in Windows Bluetooth Settings.
 - **`ESPNOW_TX` + USB Base Station *(Experimental in `v0.1.0-alpha`)*:**
   > [!WARNING]
-  > **Experimental Status (`v0.1.0-alpha`):** In this release, `ESPNOW_TX` transmits **broadcast packets** (`FF:FF:FF:FF:FF:FF`) on **channel 1** at `250 Hz` (`-DTANDEM_ESPNOW_CHANNEL`, `-DTANDEM_ESPNOW_TX_HZ`) to any listening T.A.N.D.E.M. Base Station (`esp32_s2_base_station`, `esp32_s2_base_station_combined`, or `esp32_s3_base_station`). Unicast Base Station pairing and NVS peer-MAC persistence are tracked in GitHub Issue **#48** (advanced bench users can override a unicast target at compile time via `-DTANDEM_ESPNOW_PEER_MAC={...}`).
+  > **Experimental Status (`v0.1.0-alpha`):** In this release, `ESPNOW_TX` transmits **broadcast packets** (`FF:FF:FF:FF:FF:FF`) on **channel 1** at `250 Hz` (`-DTANDEM_ESPNOW_CHANNEL`, `-DTANDEM_ESPNOW_TX_HZ`) to any listening Tandem Controls Base Station (`esp32_s2_base_station`, `esp32_s2_base_station_combined`, or `esp32_s3_base_station`). Unicast Base Station pairing and NVS peer-MAC persistence are tracked in GitHub Issue **#48** (advanced bench users can override a unicast target at compile time via `-DTANDEM_ESPNOW_PEER_MAC={...}`).
   - Base Station receives both Left (`esp32_wroom_stick`) and Right (`esp32_wroom_stick_right`) sticks, applies an independent `200 ms` per-stick failsafe (`-DTANDEM_FAILSAFE_TIMEOUT_MS=200`), and exposes either **2 independent USB HID gamepads** (`Dual` default, `VID=0x303A PID=0x80C4`) or **1 combined gamepad** (`esp32_s2_base_station_combined`, `VID=0x303A PID=0x80C5`) at up to `1000 Hz`.
 
 ---
 
-## 5. Calibrating & Saving to NVS (Web Configurator)
+## 5. Calibrating & Saving to NVS (Tandem Configurator)
 
-Open **[https://bibi2424.github.io/TANDEM/](https://bibi2424.github.io/TANDEM/)** in desktop **Chrome** or **Edge** *(or serve locally with `python tools/configurator/serve.py` and open `http://localhost:8000/`)*.
+Open **[https://tandem-controls.github.io/tandem/](https://tandem-controls.github.io/tandem/)** in desktop **Chrome** or **Edge** *(or serve locally with `python tools/configurator/serve.py` and open `http://localhost:8000/`)*.
 
 > [!NOTE]
 > Chrome or Edge is required for **Connect WebHID**, **Connect Serial**, and **Connect BLE**. The **Browser Gamepad API** inside **Live Tester (joy.cpl)** works in any browser supporting the Gamepad API.

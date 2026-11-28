@@ -549,7 +549,7 @@
       const dev = devices[0];
       const info = findHidConfigCollection(dev);
       if (!info) {
-        throw new Error("Selected device does not expose a T.A.N.D.E.M. WebHID collection");
+        throw new Error("Selected device does not expose a Tandem Controls WebHID collection");
       }
       if (
         info.inReportBytes < HID_OVERHEAD_BYTES + 1 ||
@@ -1286,7 +1286,7 @@
   function renderLiveCards() {
     if (state.liveSource === "device") {
       if (!state.connected || !state.caps) {
-        els.liveCardsContainer.innerHTML = `<p class="muted">Connect a T.A.N.D.E.M. device to view its live stream.</p>`;
+        els.liveCardsContainer.innerHTML = `<p class="muted">Connect a Tandem Controls device to view its live stream.</p>`;
         state.renderedLiveKey = "device-empty";
         return;
       }
@@ -1299,7 +1299,7 @@
       const r = roleDisplay(state.caps.role);
       const card = createLiveCardElement({
         cardKey: "device",
-        title: `${r.text} — ${state.caps.board || "T.A.N.D.E.M."}`,
+        title: `${r.text} — ${state.caps.board || "Tandem Controls"}`,
         badgeText: state.caps.mode || "LIVE",
         axisIndices: axes,
         buttonCount: btns.length,
@@ -1497,7 +1497,7 @@
 
   function renderAxes() {
     if (!state.caps || state.axes.length === 0) {
-      els.axesGrid.innerHTML = `<p class="muted">Connect a T.A.N.D.E.M. stick over USB (<strong>WebHID</strong> or <strong>WebSerial</strong>) or BLE (<code>BLE_CFG</code> mode — no OS Bluetooth pairing needed).</p>`;
+      els.axesGrid.innerHTML = `<p class="muted">Connect a Tandem Controls stick over USB (<strong>WebHID</strong> or <strong>WebSerial</strong>) or BLE (<code>BLE_CFG</code> mode — no OS Bluetooth pairing needed).</p>`;
       return;
     }
     if (state.caps.cfg === false) {
@@ -1702,7 +1702,7 @@
         switchTab("live");
       }
       await transport.sendCommand("live 1", "live");
-      showToast("Connected to T.A.N.D.E.M. device.", "ok");
+      showToast("Connected to Tandem Controls device.", "ok");
     } catch (err) {
       await transport.disconnect();
       setConnectedUi(false);
