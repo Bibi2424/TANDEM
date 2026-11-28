@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Zero-install browser configurator and live controller tester for Tandem Controls (single-stick, HOTAS, HOSAS, and custom DIY rigs) over WebHID, WebSerial, and Web Bluetooth." />
+  <title>Tandem Configurator — Live Controller Tester &amp; Calibration</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Tandem Configurator</h1>
+      <span class="subtitle">Live Tester (joy.cpl), Telemetry &amp; WebHID / WebSerial / Web Bluetooth Calibration</span>
+    </div>
+    <div class="actions">
+      <button id="btn-connect-hid" class="btn btn-primary">Connect WebHID</button>
+      <button id="btn-connect" class="btn btn-primary">Connect Serial</button>
+      <button id="btn-connect-ble" class="btn btn-primary">Connect BLE</button>
+      <button id="btn-disconnect" class="btn btn-secondary" disabled>Disconnect</button>
+      <button id="btn-reset" class="btn btn-secondary" disabled>Reset Defaults</button>
+      <button id="btn-save" class="btn btn-accent" disabled>Save to Flash</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="banner-unsupported" class="banner banner-warn hidden">
+      WebHID, WebSerial, and Web Bluetooth are unavailable in this browser (use desktop <strong>Chrome</strong> or <strong>Edge</strong> for device tuning). The <strong>Gamepad API</strong> Live Tester still works below for OS-enumerated controllers.
+    </div>
+    <div id="status-toast" class="banner hidden"></div>
+
+    <section id="device-panel" class="card device-bar">
+      <div class="badge-group">
+        <span class="badge">Status: <strong id="val-status">Disconnected</strong></span>
+        <span class="badge">Role: <strong id="val-role" class="role-badge">—</strong></span>
+        <span class="badge">Board: <strong id="val-board">—</strong></span>
+        <span class="badge">Mode: <strong id="val-mode">—</strong></span>
+        <span class="badge">Input: <strong id="val-input">—</strong></span>
+        <span class="badge">Firmware: <strong id="val-fw">—</strong></span>
+        <span class="badge">Transports: <span id="val-transports" class="transport-pills">—</span></span>
+      </div>
+      <div id="device-settings-row" class="device-settings-row hidden">
+        <div id="stick-dev-controls" class="device-controls hidden">
+          <label class="inline-field">Role
+            <select id="sel-stick-role">
+              <option value="L">Left Stick</option>
+              <option value="R">Right Stick</option>
+            </select>
+          </label>
+          <label class="inline-field">Transport Mode
+            <select id="sel-stick-mode"></select>
+          </label>
+        </div>
+        <div id="base-dev-controls" class="device-controls hidden">
+          <label class="inline-field">Output Mode
+            <select id="sel-base-mode">
+              <option value="DUAL">Dual (2x HID)</option>
+              <option value="COMBINED">Combined (1x HID)</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section id="telemetry-panel" class="card telemetry-bar hidden">
+      <div class="tlm-item">
+        <span class="tlm-label">Sample / RX Rate</span>
+        <strong id="tlm-sample-hz" class="tlm-val">N/A</strong>
+      </div>
+      <div class="tlm-item">
+        <span class="tlm-label">TX / HID Rate</span>
+        <strong id="tlm-tx-hz" class="tlm-val">N/A</strong>
+      </div>
+      <div class="tlm-item">
+        <span class="tlm-label">Link / Peer</span>
+        <strong id="tlm-peer" class="tlm-val">N/A</strong>
+      </div>
+      <div class="tlm-item">
+        <span class="tlm-label">RSSI</span>
+        <strong id="tlm-rssi" class="tlm-val">N/A</strong>
+      </div>
+      <div class="tlm-item">
+        <span class="tlm-label">Dropped</span>
+        <strong id="tlm-drop" class="tlm-val">N/A</strong>
+      </div>
+      <div class="tlm-item">
+        <span class="tlm-label">Failsafe</span>
+        <strong id="tlm-failsafe" class="tlm-pill">N/A</strong>
+      </div>
+      <div class="tlm-item">
+        <span class="tlm-label">Battery</span>
+        <strong id="tlm-battery" class="tlm-val">N/A</strong>
+      </div>
+    </section>
+
+    <nav class="tab-bar" role="tablist">
+      <button id="tab-btn-live" class="tab-btn active" role="tab" aria-selected="true">Live Tester (joy.cpl)</button>
+      <button id="tab-btn-calib" class="tab-btn" role="tab" aria-selected="false">Axes &amp; Calibration</button>
+    </nav>
+
+    <section id="panel-live" class="card">
+      <div class="section-header">
+        <div>
+          <h2>Live Controller Tester &amp; Diagnostics</h2>
+          <span class="subtitle">2D X/Y crosshair, circularity trace, rest-offset, ADC noise floor, buttons &amp; POV hat</span>
+        </div>
+        <div class="wizard-controls">
+          <div class="segmented" role="group" aria-label="Live telemetry source">
+            <button id="btn-source-gamepad" class="seg-btn active">Browser Gamepad API</button>
+            <button id="btn-source-device" class="seg-btn" disabled>Device Stream</button>
+          </div>
+          <label id="wrap-show-all-btns" class="toggle-inline hidden">
+            <input type="checkbox" id="chk-show-all-btns" />
+            All 32 buttons
+          </label>
+          <button id="btn-reset-diag" class="btn btn-secondary">Reset Diagnostics</button>
+        </div>
+      </div>
+
+      <div id="live-cards-container" class="live-cards-grid">
+        <p class="muted">Plug in a Tandem Controls USB/BLE HID stick or Base Station and move an axis/press a button for instant <strong>Gamepad API</strong> testing, or click <strong>Connect WebHID</strong> / <strong>Connect Serial</strong> / <strong>Connect BLE</strong> above for raw ADC values and calibration.</p>
+      </div>
+    </section>
+
+    <div id="panel-calib" class="hidden">
+      <div id="calib-readonly-banner" class="banner banner-warn hidden">
+        Connected device is a <strong>Base Station</strong> (read-only telemetry/live view). Connect directly to a stick over USB or <code>BLE_CFG</code> to edit and persist axis calibration.
+      </div>
+
+      <section class="card">
+        <div class="section-header">
+          <h2>Axes &amp; Calibration</h2>
+          <div class="wizard-controls">
+            <label class="toggle-inline">
+              <input type="checkbox" id="chk-show-all-axes" />
+              Show all 8 axis slots
+            </label>
+            <button id="btn-center-all" class="btn btn-secondary" disabled>Capture Center (All)</button>
+            <button id="btn-sweep-all" class="btn btn-secondary" disabled>Start Min/Max Sweep</button>
+            <button id="btn-apply-all" class="btn btn-primary" disabled>Apply All Axes</button>
+          </div>
+        </div>
+        <div id="axes-grid" class="axes-grid">
+          <p class="muted">Connect a Tandem Controls stick over USB (<strong>WebHID</strong> or <strong>WebSerial</strong>) or BLE (<code>BLE_CFG</code> mode — no OS Bluetooth pairing needed).</p>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top: 1rem;">
+        <h2>Buttons &amp; POV Hat</h2>
+        <div id="digital-panel" class="digital-panel">
+          <div id="hat-box" class="hat-box hidden">
+            <span class="label">POV Hat</span>
+            <strong id="val-hat">Centered (0)</strong>
+          </div>
+          <div id="buttons-grid" class="buttons-grid"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -44,35 +44,35 @@ GitHub Releases attach one merged, self-contained `.bin` per target (containing 
 
    ```bash
    # Stick firmware
-   pio run -e esp32_wroom_stick -t upload
-   pio run -e esp32_wroom_stick_right -t upload
-   pio run -e esp32_s2_stick -t upload
-   pio run -e esp32_s3_stick -t upload
+   pio run -d firmware -e esp32_wroom_stick -t upload
+   pio run -d firmware -e esp32_wroom_stick_right -t upload
+   pio run -d firmware -e esp32_s2_stick -t upload
+   pio run -d firmware -e esp32_s3_stick -t upload
 
    # USB Base Station firmware (for ESP-NOW wireless mode)
-   pio run -e esp32_s2_base_station -t upload
-   pio run -e esp32_s2_base_station_combined -t upload
-   pio run -e esp32_s3_base_station -t upload
+   pio run -d firmware -e esp32_s2_base_station -t upload
+   pio run -d firmware -e esp32_s2_base_station_combined -t upload
+   pio run -d firmware -e esp32_s3_base_station -t upload
 
    # Optional: generate a local 0x0-flashable merged binary
-   pio run -e esp32_s2_stick -t mergebin
+   pio run -d firmware -e esp32_s2_stick -t mergebin
    ```
 
 3. Open the serial console at **115200 baud**:
 
    ```bash
-   pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
+   pio device monitor -d firmware -b 115200   # add -p <PORT> if multiple boards are connected
    ```
 
 > [!TIP]
-> - **Multiple boards attached:** Pin `upload_port` / `monitor_port` per environment in a gitignored `platformio_local.ini` file (see [README.md](../README.md#local-port-overrides-platformio_localini)).
+> - **Multiple boards attached:** Pin `upload_port` / `monitor_port` per environment in a gitignored `firmware/platformio_local.ini` file (see [README.md](../README.md#local-port-overrides-firmwareplatformio_localini)).
 > - **ESP32-S2 USB bootloader / serial tip:** If a native-USB `ESP32-S2` does not enter flash mode automatically, hold `BOOT` (`GPIO0`), tap `RST`, then release `BOOT`. Because native USB CDC re-enumerates on reset, tap `RST` after attaching the serial monitor if you want to capture the boot banner.
 
 ---
 
 ## 3. Prototyping Pinout Summary
 
-Default pin assignments live in [board_config.h](../include/boards/board_config.h) ([esp32_wroom.h](../include/boards/esp32_wroom.h), [esp32_s2.h](../include/boards/esp32_s2.h), [esp32_s3.h](../include/boards/esp32_s3.h)):
+Default pin assignments live in [board_config.h](../firmware/include/boards/board_config.h) ([esp32_wroom.h](../firmware/include/boards/esp32_wroom.h), [esp32_s2.h](../firmware/include/boards/esp32_s2.h), [esp32_s3.h](../firmware/include/boards/esp32_s3.h)):
 
 | Signal | ESP32-WROOM (`esp32dev`) | ESP32-S2 (`lolin_s2_mini`) | ESP32-S3 (`esp32-s3-devkitc-1`) | Notes |
 | :--- | :--- | :--- | :--- | :--- |
@@ -136,7 +136,7 @@ Tandem Controls enforces **strictly mutually exclusive wireless stacks** — swi
 
 ## 5. Calibrating & Saving to NVS (Tandem Configurator)
 
-Open **[https://tandem-controls.github.io/tandem/](https://tandem-controls.github.io/tandem/)** in desktop **Chrome** or **Edge** *(or serve locally with `python tools/configurator/serve.py` and open `http://localhost:8000/`)*.
+Open **[https://tandem-controls.github.io/tandem/](https://tandem-controls.github.io/tandem/)** in desktop **Chrome** or **Edge** *(or serve locally with `python configurator/serve.py` and open `http://localhost:8000/`)*.
 
 > [!NOTE]
 > Chrome or Edge is required for **Connect WebHID**, **Connect Serial**, and **Connect BLE**. The **Browser Gamepad API** inside **Live Tester (joy.cpl)** works in any browser supporting the Gamepad API.

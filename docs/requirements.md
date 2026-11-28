@@ -47,7 +47,7 @@ This document outlines the technical baseline requirements for the hardware, fir
   * Implement a capability-driven handshake (`GET_CAPABILITIES` / `caps` reporting `device_role`, `max_profiles`, `feature_flags`, `input_groups`/`output_groups`) and reserve Protocol v2 OpCode ranges (`0x40–0x4F` Profiles, `0x50–0x5F` Node Graph/Layout, `0x60–0x6F` Dongle Proxy) for Post-1.0 features (Selectable Output Device Profiles and the Visual Node Graph & Dual-Stick Multi-Profile Engine).
 * **Forward-Compatible Non-Volatile Persistence:** Isolate fixed Stage 1 hardware calibration from user Stage 2 profiles (`schema_version` + `profile_slot`) in non-volatile storage using versioned, CRC-32-validated zero-heap TLV serialization (skipping unknown tags and defaulting omitted fields) with a safe factory-reset fallback on boot.
 * **Stable HID Descriptors:** Keep HID report descriptors consistent when tuning curves/deadzones so existing OS controller bindings aren't broken by routine calibration changes.
-* **Maintainable Build Workflow:** Organize code into modular, MCU-portable C++ components (pure core input/curve math and codecs separated from board/HAL adapters and transport modules: BLE config/NVS, BLE HID, ESP-NOW, USB HID) in PlatformIO (e.g., Arduino framework) with separate build environments/targets per board, experiment, stick, and base station.
+* **Maintainable Build Workflow:** Organize code into modular, MCU-portable C++ components (pure core input/curve math and codecs separated from board/HAL adapters and transport modules: BLE config/NVS, BLE HID, ESP-NOW, USB HID) in PlatformIO (e.g., Arduino framework) under `firmware/` with separate build environments/targets per board, experiment, stick, and base station.
 
 ---
 

@@ -54,7 +54,7 @@ jobs:
       - name: Set up PlatformIO
         uses: ./.github/actions/setup-platformio
         with:
-          cache-key: ${{ runner.os }}-pio-native-${{ hashFiles('platformio.ini', 'lib/**/library.json') }}
+          cache-key: ${{ runner.os }}-pio-native-${{ hashFiles('firmware/platformio.ini', 'firmware/lib/**/library.json') }}
           cache-restore-keys: ${{ runner.os }}-pio-native-
           extra-packages: ${{ inputs.run-coverage && 'gcovr' || '' }}
 
@@ -63,7 +63,7 @@ jobs:
           TANDEM_FW_VERSION: ${{ inputs.fw-version }}
         run: |
           mkdir -p test-results
-          pio test -e native -v --junit-output-path test-results/junit.xml
+          pio test -d firmware -e native -v --junit-output-path "$PWD/test-results/junit.xml"
 
       - name: Publish unit test results
         uses: dorny/test-reporter@v1
@@ -78,14 +78,14 @@ jobs:
       - name: Run native coverage tests
         if: inputs.run-coverage
         run: |
-          rm -rf .pio/build/native_cov
-          pio test -e native_cov
+          rm -rf firmware/.pio/build/native_cov
+          pio test -d firmware -e native_cov
 
       - name: Generate tandem_core coverage report
         if: inputs.run-coverage
         run: |
           mkdir -p coverage
-          gcovr --root . --filter lib/tandem_core/ \
+          gcovr --root . --filter firmware/lib/tandem_core/ \
             --exclude-unreachable-branches --exclude-throw-branches \
             --txt \
             --json coverage/coverage.json \

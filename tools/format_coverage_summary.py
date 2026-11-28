@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Render a GitHub-flavored Markdown CI report from JUnit XML, gcovr JSON, and git diff."""
 
 from __future__ import annotations
@@ -305,12 +306,12 @@ def parse_diff_hunks(diff_text: str) -> dict[str, set[int]]:
 
 
 def collect_changed_lines(base_ref: str) -> dict[str, set[int]]:
-    """Run git diff against base_ref for lib/tandem_core/ and return changed lines."""
-    cmd = ["git", "diff", "--unified=0", f"{base_ref}...HEAD", "--", "lib/tandem_core/"]
+    """Run git diff against base_ref for firmware/lib/tandem_core/ and return changed lines."""
+    cmd = ["git", "diff", "--unified=0", f"{base_ref}...HEAD", "--", "firmware/lib/tandem_core/"]
     res = subprocess.run(cmd, text=True, capture_output=True, encoding="utf-8", check=False)
     if res.returncode != 0:
         # Fallback to two-dot diff if merge-base is unavailable (e.g., shallow clone).
-        fallback_cmd = ["git", "diff", "--unified=0", base_ref, "HEAD", "--", "lib/tandem_core/"]
+        fallback_cmd = ["git", "diff", "--unified=0", base_ref, "HEAD", "--", "firmware/lib/tandem_core/"]
         res = subprocess.run(
             fallback_cmd, text=True, capture_output=True, encoding="utf-8", check=False
         )
@@ -375,7 +376,7 @@ def render_report(
             )
         else:
             out.append(
-                "- **PR Diff Coverage:** ⚪ No executable lines changed in `lib/tandem_core/`"
+                "- **PR Diff Coverage:** ⚪ No executable lines changed in `firmware/lib/tandem_core/`"
             )
 
     if coverage is not None:
@@ -384,7 +385,7 @@ def render_report(
         l_pct = _format_percent(coverage.line_percent, coverage.line_total)
         b_pct = _format_percent(coverage.branch_percent, coverage.branch_total)
         out.append(
-            f"- **Total `lib/tandem_core/` Coverage:** "
+            f"- **Total `firmware/lib/tandem_core/` Coverage:** "
             f"{l_badge} **{l_pct}** lines (`{coverage.line_covered} / {coverage.line_total}`) · "
             f"{b_badge} **{b_pct}** branches (`{coverage.branch_covered} / {coverage.branch_total}`)"
         )
@@ -406,7 +407,7 @@ def render_report(
 
     # Changed files PR diff table
     if diff_rows:
-        out.append("### Changed Files in This PR (`lib/tandem_core/`)")
+        out.append("### Changed Files in This PR (`firmware/lib/tandem_core/`)")
         out.append("")
         out.append("| Status | File | PR Diff Lines | Total Lines | Branches | Missing (PR) |")
         out.append("| :---: | :--- | :---: | :---: | :---: | :--- |")
@@ -447,7 +448,7 @@ def render_report(
     if coverage is not None and coverage.files:
         out.append("<details>")
         out.append(
-            f"<summary>Full <code>lib/tandem_core/</code> Coverage ({len(coverage.files)} files — "
+            f"<summary>Full <code>firmware/lib/tandem_core/</code> Coverage ({len(coverage.files)} files — "
             f"{_format_percent(coverage.line_percent, coverage.line_total)} lines)</summary>"
         )
         out.append("")

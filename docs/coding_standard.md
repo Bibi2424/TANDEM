@@ -12,7 +12,7 @@ Only these explicit deviations from `BasedOnStyle: Google` are configured in [.c
 
 | Option | Value | Rationale |
 | :--- | :--- | :--- |
-| `Standard` | `c++17` | Match `lib/tandem_core/` and firmware C++17 target standard |
+| `Standard` | `c++17` | Match `firmware/lib/tandem_core/` and firmware C++17 target standard |
 | `ColumnLimit` | `150` | Avoid cramped line wrapping on modern displays and long assertions |
 | `AllowShortFunctionsOnASingleLine` | `Inline` | Allow short inline/empty functions in headers while keeping `.cpp` definitions multi-line |
 | `AllowShortIfStatementsOnASingleLine` | `Never` | Keep control-flow branches readable and consistently braced |
@@ -26,7 +26,7 @@ Shared editor whitespace/encoding defaults (UTF-8, `LF` line endings, final newl
 ## 2. Header & Include Hygiene
 
 - **File extensions & names:** Use `.h` for all headers and `.cpp` for all C++ sources, named in `snake_case`.
-- **Include guards:** Start every header with `#pragma once` on line 1 (never `#ifndef` header guards).
+- **SPDX & include guards:** Start every C/C++ header with `// SPDX-License-Identifier: GPL-3.0-only` on line 1 followed immediately by `#pragma once` on line 2 (never `#ifndef` header guards); start `.c`/`.cpp` sources with `// SPDX-License-Identifier: GPL-3.0-only` on line 1.
 - **Self-contained headers:** Every `.cpp` file must include its own matching `.h` file first to verify the header compiles standalone.
 - **Include ordering:** Follow Google's `IncludeBlocks: Regroup` grouping:
   1. Matching header (for `.cpp` files, e.g., `#include "tandem/axis_shaping.h"`)
@@ -35,7 +35,7 @@ Shared editor whitespace/encoding defaults (UTF-8, `LF` line endings, final newl
   4. Project headers in quotes (`"boards/..."`, `"tandem/..."`, `"tandem_hal/..."`, local `"..."`)
   - `SortIncludes: CaseSensitive` naturally preserves `<freertos/FreeRTOS.h>` ahead of lowercase FreeRTOS headers (`<freertos/portmacro.h>`, `<freertos/queue.h>`).
   - Prefer C++ `<c*>` headers (`<cstdint>`, `<cstddef>`, `<cstring>`, `<cstdio>`, `<cmath>`) and `std::`-qualified symbols over legacy C `.h` headers.
-- **`// clang-format off` exceptions:** Permitted only for hand-aligned tabular binary layouts (such as HID report descriptors in [hid_report.h](../lib/tandem_core/include/tandem/hid_report.h)) and order-sensitive vendor SDK include sequences. Always restore formatting immediately with `// clang-format on`.
+- **`// clang-format off` exceptions:** Permitted only for hand-aligned tabular binary layouts (such as HID report descriptors in [hid_report.h](../firmware/lib/tandem_core/include/tandem/hid_report.h)) and order-sensitive vendor SDK include sequences. Always restore formatting immediately with `// clang-format on`.
 
 ---
 
@@ -72,11 +72,12 @@ Shared editor whitespace/encoding defaults (UTF-8, `LF` line endings, final newl
 
 CI linting is scoped to C/C++; supporting web and Python files follow [.editorconfig](../.editorconfig) and these lightweight conventions:
 
-- **Tandem Configurator (`tools/configurator/` — JS, HTML, CSS):**
+- **Tandem Configurator (`configurator/` — JS, HTML, CSS, `AGPL-3.0-only`):**
+  - Include `<!-- SPDX-License-Identifier: AGPL-3.0-only -->` on line 2 of `index.html` (after `<!DOCTYPE html>`), `/* SPDX-License-Identifier: AGPL-3.0-only */` on line 1 of CSS files, and `// SPDX-License-Identifier: AGPL-3.0-only` on line 1 of JS files.
   - 2-space indentation, `"use strict"`, double quotes, semicolons, trailing commas in multiline literals.
   - `camelCase` functions/variables, `PascalCase` classes, `SCREAMING_SNAKE_CASE` top-level constants; `const` by default (`let` only when reassigned, never `var`).
   - Lowercase HTML tags/attributes with double-quoted values; CSS `--kebab-case` custom properties in `:root`.
-- **Python (`tools/*.py`):**
+- **Python (`tools/*.py` — `GPL-3.0-only`; `configurator/serve.py` — `AGPL-3.0-only`):**
   - PEP 8, 4-space indentation, 150-column max line length, type annotations on helper functions, standard library imports sorted ahead of third-party/local imports.
 
 ---

@@ -1,10 +1,10 @@
-name: Deploy Web Configurator to GitHub Pages
+name: Deploy Tandem Configurator to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "tools/configurator/**"
+      - "configurator/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    name: Package tools/configurator
+    name: Package configurator
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,7 +31,7 @@ jobs:
       - name: Upload configurator artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: tools/configurator
+          path: configurator
 
   deploy:
     name: Deploy to GitHub Pages
