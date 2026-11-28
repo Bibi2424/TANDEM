@@ -1,4 +1,5 @@
-"""Check or apply clang-format across T.A.N.D.E.M. C/C++ source and header files."""
+# SPDX-License-Identifier: GPL-3.0-only
+"""Check or apply clang-format across Tandem Controls C/C++ source and header files."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ import sysconfig
 from typing import Optional
 
 PINNED_CLANG_FORMAT_VERSION = "23.1.5"
-TARGET_DIRS = ("include", "lib", "src", "test")
+TARGET_DIRS = ("firmware/include", "firmware/lib", "firmware/src", "firmware/test")
 CPP_EXTENSIONS = {".c", ".h", ".cpp", ".hpp"}
 SKIP_DIRS = {".git", ".pio", "build"}
 CHUNK_SIZE = 50
@@ -104,7 +105,7 @@ def run_clang_format(cf_bin: Path, repo_root: Path, files: list[str], fix: bool)
 def build_parser() -> argparse.ArgumentParser:
     """Construct the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Check or auto-format T.A.N.D.E.M. C/C++ files using .clang-format."
+        description="Check or auto-format Tandem Controls C/C++ files using .clang-format."
     )
     parser.add_argument(
         "--fix",

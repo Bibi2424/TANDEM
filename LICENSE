@@ -1,21 +1,48 @@
-MIT License
+Tandem Controls — Licensing & Trademark Notice
+=============================================
 
-Copyright (c) 2026 Bibi2424
+Copyright (c) 2026 Guillaume Dib (Bibi2424) / Tandem Controls
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This repository uses a split-license model so software, browser tooling,
+electronics hardware, and mechanical CAD components are each governed by the
+open-source license best suited to their domain.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Component License Index
+-----------------------
+
+| Directory / Scope | Component | License | SPDX Identifier | Full Text |
+| :--- | :--- | :--- | :--- | :--- |
+| `firmware/` | Embedded firmware, `tandem_core`, `tandem_hal`, board headers, native tests | GNU General Public License v3.0 | `GPL-3.0-only` | [firmware/LICENSE](firmware/LICENSE) |
+| `configurator/` | Tandem Configurator web application (`index.html`, `app.js`, `style.css`, `serve.py`) | GNU Affero General Public License v3.0 | `AGPL-3.0-only` | [configurator/LICENSE](configurator/LICENSE) |
+| `hardware/` | KiCad schematics, PCB layouts, BOMs, and electrical design files | CERN Open Hardware Licence v2 (Strongly Reciprocal) | `CERN-OHL-S-2.0` | [hardware/LICENSE](hardware/LICENSE) |
+| `mechanical/` | 3D models, parametric CAD files, enclosures, gimbals, and grips | Creative Commons Attribution-ShareAlike 4.0 International | `CC-BY-SA-4.0` | [mechanical/LICENSE](mechanical/LICENSE) |
+| Root, `docs/`, `tools/`, `.github/` | Documentation, build/CI/test scripts, workflows, and any root-level files unless noted otherwise | GNU General Public License v3.0 | `GPL-3.0-only` | [firmware/LICENSE](firmware/LICENSE) |
+
+Note on `configurator/` network deployment: Under `AGPL-3.0-only`, if you modify
+the Tandem Configurator web application and host or serve a modified version to
+users over a network, you must make the corresponding source code of your
+modified version available to those users under the terms of `AGPL-3.0-only`.
+
+
+Trademark Notice
+----------------
+
+The open-source licenses listed above grant rights only to copyright and
+applicable hardware/design rights — they do **not** grant any trademark rights.
+
+"Tandem Controls", "Tandem Configurator", "T.A.N.D.E.M.", and associated
+project names, wordmarks, and logos (whether registered or unregistered) are
+trademarks of Tandem Controls / Guillaume Dib (Bibi2424).
+
+- You may make truthful, factual statements of compatibility (for example,
+  "designed for Tandem Controls firmware" or "compatible with Tandem
+  Configurator").
+- You must **not** market, sell, or distribute modified firmware, hosted
+  configurators, PCBs, or 3D-printed/manufactured hardware under the "Tandem
+  Controls" or "Tandem Configurator" names in a way that implies official
+  endorsement, certification, or origin.
+- If you fork or commercialize modified versions, rebrand the product name,
+  branding strings, PCB silkscreen branding, and hosted UI title clearly as your
+  own derivative project while preserving the required copyright notices,
+  license texts, and source-availability disclosures.

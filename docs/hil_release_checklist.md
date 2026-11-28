@@ -24,19 +24,19 @@ Boards Tested   : <e.g. ESP32-S2 Mini, ESP32-WROOM x2, ESP32-S3 DevKitC-1>
 - [ ] Working tree is clean on target `main` commit; formatting passes:
   `python tools/check_format.py --strict-version`
 - [ ] All native unit tests pass (`0` warnings):
-  `pio test -e native -v`
+  `pio test -d firmware -e native -v`
 - [ ] Native coverage tests pass (`0` warnings):
-  `pio test -e native_cov`
+  `pio test -d firmware -e native_cov`
 - [ ] All default firmware environments build cleanly (`0` warnings):
-  `pio run`
-- [ ] Merged `0x0` release binaries built and verified (via `pio run -e <env> -t mergebin` or `.github/workflows/release.yml` `workflow_dispatch` dry run + `sha256sum -c SHA256SUMS.txt`).
+  `pio run -d firmware`
+- [ ] Merged `0x0` release binaries built and verified (via `pio run -d firmware -e <env> -t mergebin` or `.github/workflows/release.yml` `workflow_dispatch` dry run + `sha256sum -c SHA256SUMS.txt`).
 - [ ] **Firmware identity check:** `$TANDEM caps` (and the Web Configurator **Firmware** badge) reports the exact build SemVer + Git commit (never `0.0.0-unknown` or `unknown`).
 
 ---
 
 ## 2. `ESP32-S2` Wired `USB_HID`, WebHID & WebSerial (`esp32_s2_stick`)
 
-- [ ] Flash `esp32_s2_stick` (from `firmware-merged.bin` at `0x0` or `pio run -e esp32_s2_stick -t upload`) and open serial monitor (`115200` baud, tapping `RST` after attaching).
+- [ ] Flash `esp32_s2_stick` (from `firmware-merged.bin` at `0x0` or `pio run -d firmware -e esp32_s2_stick -t upload`) and open serial monitor (`115200` baud, tapping `RST` after attaching).
 - [ ] Boot banner prints expected board (`ESP32-S2 (LOLIN S2 Mini)`), `Caps : USB=1 BLE=0 ESP-NOW=1`, and `Mode : USB_HID (ok)`.
 - [ ] Host OS enumerates `TANDEM-Stick-XXXX` cleanly (`VID=0x303A`, `PID=0x80C2` on LOLIN S2 Mini).
 - [ ] **Synthetic input:** Short-press `BOOT` -> banner prints `SYNTHETIC`, LED blinks at `250 ms`; axes sweep smoothly and buttons cycle in Windows `joy.cpl`, [tools/hil_usb_hid_check.py](../tools/hil_usb_hid_check.py) (`python tools/hil_usb_hid_check.py --duration 4.0`), and Web Configurator **Live Tester (joy.cpl)** (**Browser Gamepad API**).

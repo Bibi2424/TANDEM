@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 import argparse
 import json
 import os
@@ -58,17 +59,20 @@ def _resolve_base_version(project_dir: str) -> str:
                 if match:
                     return f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
 
-    library_json = os.path.join(project_dir, "lib", "tandem_core", "library.json")
-    try:
-        with open(library_json, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        normalized = _normalize_semver(str(data.get("version", "")))
-        if normalized:
-            match = SEMVER_RE.fullmatch(normalized)
-            if match:
-                return f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
-    except Exception:
-        pass
+    for candidate_path in (
+        os.path.join(project_dir, "lib", "tandem_core", "library.json"),
+        os.path.join(project_dir, "firmware", "lib", "tandem_core", "library.json"),
+    ):
+        try:
+            with open(candidate_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            normalized = _normalize_semver(str(data.get("version", "")))
+            if normalized:
+                match = SEMVER_RE.fullmatch(normalized)
+                if match:
+                    return f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
+        except Exception:
+            pass
 
     return DEFAULT_BASE_VERSION
 
@@ -108,7 +112,7 @@ def resolve_fw_version(
 def main(argv: Optional[list] = None) -> int:
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     parser = argparse.ArgumentParser(
-        description="Resolve T.A.N.D.E.M. firmware SemVer and Git commit metadata."
+        description="Resolve Tandem Controls firmware SemVer and Git commit metadata."
     )
     parser.add_argument(
         "--project-dir",

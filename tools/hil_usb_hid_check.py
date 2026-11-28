@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Host-side Windows HIL verification script for T.A.N.D.E.M. USB HID Joystick.
 
 Uses Win32 winmm.dll (joyGetDevCapsW / joyGetPosEx) with zero external packages.

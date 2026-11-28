@@ -65,7 +65,7 @@ jobs:
       - name: Set up PlatformIO
         uses: ./.github/actions/setup-platformio
         with:
-          cache-key: ${{ runner.os }}-pio-fw-${{ hashFiles('platformio.ini') }}
+          cache-key: ${{ runner.os }}-pio-fw-${{ hashFiles('firmware/platformio.ini') }}
           cache-restore-keys: ${{ runner.os }}-pio-fw-
 
       - name: Resolve version and release metadata
@@ -120,8 +120,8 @@ jobs:
           )
           for env_name in "${ENVS[@]}"; do
             echo "=== Building and merging ${env_name} (v${VERSION}) ==="
-            pio run -e "$env_name" -t mergebin
-            cp ".pio/build/${env_name}/firmware-merged.bin" "release-assets/tandem-${env_name}-v${VERSION}-merged.bin"
+            pio run -d firmware -e "$env_name" -t mergebin
+            cp "firmware/.pio/build/${env_name}/firmware-merged.bin" "release-assets/tandem-${env_name}-v${VERSION}-merged.bin"
           done
 
       - name: Generate and verify SHA-256 checksums

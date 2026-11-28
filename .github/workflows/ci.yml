@@ -36,16 +36,16 @@ jobs:
       - name: Set up PlatformIO
         uses: ./.github/actions/setup-platformio
         with:
-          cache-key: ${{ runner.os }}-pio-fw-${{ hashFiles('platformio.ini') }}
+          cache-key: ${{ runner.os }}-pio-fw-${{ hashFiles('firmware/platformio.ini') }}
           cache-restore-keys: ${{ runner.os }}-pio-fw-
 
       - name: Cache PlatformIO build objects
         uses: actions/cache@v4
         with:
           path: ~/.pio-build-cache
-          key: ${{ runner.os }}-pio-build-cache-${{ hashFiles('platformio.ini', 'tools/git_version.py') }}
+          key: ${{ runner.os }}-pio-build-cache-${{ hashFiles('firmware/platformio.ini', 'tools/git_version.py') }}
 
       - name: Build default firmware environments
         run: |
           mkdir -p "$HOME/.pio-build-cache"
-          PLATFORMIO_BUILD_CACHE_DIR="$HOME/.pio-build-cache" pio run
+          PLATFORMIO_BUILD_CACHE_DIR="$HOME/.pio-build-cache" pio run -d firmware
