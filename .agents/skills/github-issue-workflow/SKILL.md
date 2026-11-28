@@ -2,13 +2,13 @@
 name: github-issue-workflow
 description: >-
   Manages the GitHub Issue, Project board status, and Pull Request lifecycle
-  for T.A.N.D.E.M. tasks and parent Features. Use whenever starting a task,
+  for Tandem Controls tasks and parent Features. Use whenever starting a task,
   opening a PR, or when the user notifies that a PR has been closed/merged.
 ---
 
 # GitHub Issue & PR Lifecycle Workflow
 
-Follow this procedure for every **Task** (and its parent **Feature**, if any) in `Bibi2424/TANDEM`.
+Follow this procedure for every **Task** (and its parent **Feature**, if any) in `tandem-controls/tandem`.
 
 ## 1. Taking a Task
 

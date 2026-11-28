@@ -1,6 +1,6 @@
-# AGENTS.md — T.A.N.D.E.M.
+# AGENTS.md — Tandem Controls
 
-**T.A.N.D.E.M.** (*Twin Axes, No Drift, Except Maybe*) is a DIY dual-joystick (HOSAS) controller project.
+**Tandem Controls** (*Twin Axes, No Drift, Except Maybe — Calibrated Online, No Trouble, Really, Only Light Soldering*) is an open-source modular controller platform (single-stick, HOTAS, HOSAS, and custom hybrid rigs).
 
 ## Source of Truth
 
@@ -50,7 +50,7 @@
   - `lib/tandem_hal/` — MCU/board-isolated ADC1/GPIO input scanner, debounced `BootButton`, NVS config & device-settings persistence (`config_nvs`), and `HidConfigEndpoint` RTOS queue/TX adapters (`espressif32`-scoped) into `tandem::RawStickInput` / `tandem::StickInputConfig` / `tandem::DeviceSettings`.
   - `include/boards/` — Per-board capability flags and pinmaps (`board_config.h`, `esp32_wroom.h`, `esp32_s2.h`, `esp32_s3.h`), selected via `-DTANDEM_BOARD_*` build flags.
   - `src/apps/<name>/` — Standalone firmware apps (`stick`, `base_station`), selected per environment via `build_src_filter = -<*> +<apps/<name>/>`.
-  - `tools/configurator/` — Static zero-build WebHID, WebSerial & Web Bluetooth browser configurator (`index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
+  - `tools/configurator/` — Static zero-build WebHID, WebSerial & Web Bluetooth browser app (**Tandem Configurator**: `index.html`, `style.css`, `app.js`) for `joy.cpl`-style live testing, Gamepad API inspection, telemetry, calibration, and curve/deadzone tuning.
   - `tools/check_format.py` — Runs `clang-format --dry-run --Werror` (or `--fix`) over C/C++ files in `include/`, `lib/`, `src/`, `test/` using the CI-pinned `clang-format` version.
   - `tools/git_version.py` — PlatformIO `pre:` script (and CLI with `--print-version` / `--print-commit`) injecting `TANDEM_FW_VERSION` (exact Git tag SemVer or `<base>-dev+<sha>` fallback, with optional `TANDEM_FW_VERSION` env override) and `TANDEM_GIT_COMMIT` scoped solely to `lib/tandem_core/src/core_info.cpp` to preserve build caches.
   - `tools/merge_bin.py` — PlatformIO `post:` script on `[esp32_base]` registering `-t mergebin` to merge bootloader, partition table, `boot_app0`, and `firmware.bin` into a `0x0`-flashable `firmware-merged.bin` via `esptool merge-bin`.
@@ -68,7 +68,7 @@
 - **CI, Releases & Pages:** GitHub Actions uses shared reusable workflow [.github/workflows/_checks.yml](.github/workflows/_checks.yml) and composite action [.github/actions/setup-platformio/action.yml](.github/actions/setup-platformio/action.yml):
   - [.github/workflows/ci.yml](.github/workflows/ci.yml) runs `_checks.yml` (`C++ Format Check` via `python tools/check_format.py --strict-version`, `pio test -e native -v` publishing JUnit XML results via `dorny/test-reporter`, and `pio test -e native_cov` publishing `lib/tandem_core/` `gcovr` + PR diff coverage to the step summary, sticky same-repo PR comment, and HTML artifact) alongside cached `pio run` firmware builds on pushes to `main` and pull requests.
   - [.github/workflows/release.yml](.github/workflows/release.yml) triggers on `v*` SemVer tags and `workflow_dispatch`, runs `_checks.yml` (without coverage), compiles and merges all 7 firmware targets cleanly from source (no compiled build-object cache) + `SHA256SUMS.txt`, uploads workflow artifacts, and publishes GitHub Releases on `v*` tags (automatically marking `-alpha`/`-beta`/`-rc` tags as prereleases).
-  - [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` to GitHub Pages (`https://bibi2424.github.io/TANDEM/`).
+  - [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `tools/configurator/` (**Tandem Configurator**) to GitHub Pages (`https://tandem-controls.github.io/tandem/`).
 
 ---
 
@@ -100,7 +100,7 @@
 ## Git, Issues & Workflow Conventions
 
 - **Human-controlled workflow phases (HARD GATE):** Transitions between workflow phases are strictly human-controlled. AI agents **MUST STOP and ask explicit permission before committing, pushing, or opening a PR** — **after** the final edits and verification checks are complete. Never infer permission to commit, push, or open a PR from an earlier approval (e.g., "do the code change" or an earlier "you can open a PR" prior to additional edits).
-- **Issue hierarchy:** Track work in GitHub Issues (`Bibi2424/TANDEM`) using native **Feature** issues as top-level parents, broken into PR-sized **Task** sub-issues only when ready to implement them (and **Bug** issues for defects).
+- **Issue hierarchy:** Track work in GitHub Issues (`tandem-controls/tandem`) using native **Feature** issues as top-level parents, broken into PR-sized **Task** sub-issues only when ready to implement them (and **Bug** issues for defects).
 - **Release milestones & Project tracking:**
   - Use native **GitHub Milestones** as the single source of truth for release/feature targeting; GitHub Projects v2 exposes Milestones natively for board/roadmap views (do not create redundant `release:*` labels). Pre-1.0 and `v1.0.0` use SemVer release milestones (`v0.1.0-alpha`, `v0.2.0-alpha`, `v0.3.0-beta`, `v1.0.0`), while post-1.0 work uses unversioned feature milestones (e.g., `Output Device Profiles`, `Node Graph & Dual-Stick Engine`) until release ordering is decided.
   - Assign Milestones to **Tasks** and **Bugs**, not to multi-release umbrella **Features** (`#2`, `#6`, `#7`, `#8`) or Features whose child Tasks already carry the Milestone (`#92`, `#98`, `#99`). For unsplit future **Features** (`#51`, `#64`, `#72`, `#73`), assign the Feature to its target Milestone as a roadmap placeholder until split into Tasks, then move the Milestone onto those Tasks.

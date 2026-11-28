@@ -137,7 +137,7 @@ jobs:
           TAG_NAME: ${{ steps.meta.outputs.tag_name }}
         run: |
           {
-            echo "## T.A.N.D.E.M. Firmware Build (${TAG_NAME})"
+            echo "## Tandem Controls Firmware Build (${TAG_NAME})"
             echo ""
             echo "- **Version:** \`${VERSION}\`"
             echo "- **Commit:** \`${COMMIT}\`"
@@ -190,7 +190,7 @@ jobs:
           esptool --chip <chip> write-flash 0x0 tandem-<env>-v${VERSION}-merged.bin
           \`\`\`
 
-          Configure calibration, curves, and deadzones at https://bibi2424.github.io/TANDEM/
+          Configure calibration, curves, and deadzones in Tandem Configurator: https://tandem-controls.github.io/tandem/
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -199,7 +199,7 @@ jobs:
             ARGS=(
               release create "$TAG" release-assets/*
               --verify-tag
-              --title "T.A.N.D.E.M. ${TAG}"
+              --title "Tandem Controls ${TAG}"
               --notes "$(cat "${RUNNER_TEMP}/release-notes-header.md")"
               --generate-notes
             )

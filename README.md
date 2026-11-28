@@ -1,39 +1,39 @@
-# T.A.N.D.E.M.
+# Tandem Controls
 
-**T**win **A**xes, **N**o **D**rift, **E**xcept **M**aybe
+**T**win **A**xes, **N**o **D**rift, **E**xcept **M**aybe — **C**alibrated **O**nline, **N**o **T**rouble, **R**eally, **O**nly **L**ight **S**oldering
 
-[![CI](https://github.com/Bibi2424/TANDEM/actions/workflows/ci.yml/badge.svg)](https://github.com/Bibi2424/TANDEM/actions/workflows/ci.yml)
+[![CI](https://github.com/tandem-controls/tandem/actions/workflows/ci.yml/badge.svg)](https://github.com/tandem-controls/tandem/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Build: PlatformIO](https://img.shields.io/badge/Build-PlatformIO-orange.svg)](platformio.ini)
-[![Web Configurator](https://img.shields.io/badge/Configurator-Open%20Web%20App-2ea44f?logo=googlechrome&logoColor=white)](https://bibi2424.github.io/TANDEM/)
+[![Tandem Configurator](https://img.shields.io/badge/Tandem%20Configurator-Open%20Web%20App-2ea44f?logo=googlechrome&logoColor=white)](https://tandem-controls.github.io/tandem/)
 
-A DIY dual-joystick (HOSAS) controller system built around a portable, hardware-independent C++17 core (`tandem_core`) so connectivity modes can be explored independently and moved across microcontrollers without rewriting input math.
+An open-source, modular controller platform for **single-stick, HOTAS, HOSAS, and custom hybrid rigs** (button boxes, throttles, pedals), built around a portable C++17 core (`tandem_core`) so connectivity modes and hardware targets evolve cleanly without rewriting input math.
 
 ---
 
-## Architecture Highlights
+## Why Tandem Controls?
 
-- **MCU-Portable by Design:** Final MCU selection is still open (**ESP32-S3** is a leading candidate, not yet locked in). Early prototyping runs on available **ESP32-S2** and **ESP32-WROOM** dev boards with hardware specifics isolated behind per-board headers.
-- **Shared Input Pipeline (`lib/tandem_core`):** Hardware- and transport-independent C++17 core targeting per-axis calibration (`min`/`center`/`max` + clamping), smooth boundary-rescaled deadzones, sign-preserving response curves, and link-loss failsafe handling — verified with native host unit tests.
-- **Modular Connectivity Modes (Explored Independently First):** Each transport mode is prototyped and validated as a standalone app under `src/apps/` before deciding whether or how to unify them:
+- **Zero-Install Browser Tooling ([Tandem Configurator](https://tandem-controls.github.io/tandem/)):** Calibrate axes, tune center/edge deadzones and response curves, inspect live ADC noise/circularity, and run `joy.cpl`-style Gamepad API tests directly in Chrome/Edge over **WebHID**, **WebSerial**, or **Web Bluetooth** (`tools/configurator/`).
+- **Multi-Transport Connectivity:** Unified capability-gated firmware (`src/apps/stick/` and `src/apps/base_station/`) supporting wired USB HID (`Mode C`), direct BLE HID (`Mode A`), and low-latency ESP-NOW + USB Base Station (`Mode B`, up to `1000 Hz` USB HID) with strictly mutually exclusive wireless radio teardown.
+- **Flexible Rig & Stick Mapping:** Supports standalone single-stick or custom controller setups as well as matched dual-stick HOSAS/HOTAS rigs (`Dual 2x` independent gamepads or `Combined 1x` USB HID via the Base Station).
+- **MCU-Portable C++17 Core (`lib/tandem_core/`):** Hardware- and transport-independent Stage 1/Stage 2 input shaping, CRC-32-validated NVS persistence, binary wire codecs, and failsafe logic verified by native host unit tests (`pio test -e native`). Final MCU selection remains open (**ESP32-S3** is a leading candidate alongside active **ESP32-S2** and **ESP32-WROOM** prototyping targets).
+- **Analog & Power-Path Hygiene:** Designed around clean ADC signal conditioning and safe LiPo/Li-ion charging + power-path protection (never wiring battery voltage directly to 5V `VBUS`), with open-source PCB schematics and enclosures planned on the path to `v1.0.0`.
+
+### Transport Modes Overview
 
 | Mode | Transport / Feature | Required Capabilities | Initial Prototyping Target |
 | :--- | :--- | :--- | :--- |
 | **Mode A** | Direct BLE HID gamepad to PC | BLE | `ESP32-WROOM` |
-| **Mode B** | Low-latency ESP-NOW + USB Base Station *(up to 1000 Hz USB HID)* | Wi-Fi / ESP-NOW + Native USB *(base)* | `ESP32-WROOM` → `ESP32-S2` |
+| **Mode B** | Low-latency ESP-NOW + USB Base Station *(up to 1000 Hz USB HID)* | Wi-Fi / ESP-NOW + Native USB *(base)* | `ESP32-WROOM` -> `ESP32-S2` |
 | **Mode C** | Wired USB HID gamepad | Native USB | `ESP32-S2` |
-| **Config** | USB CDC (WebSerial) & BLE GATT (Web Bluetooth) + validated NVS persistence | USB CDC / BLE + NVS | `ESP32-S2`, `ESP32-WROOM`, `ESP32-S3` |
-
-- **Web Configurator:** Hosted over HTTPS via GitHub Pages at **[https://bibi2424.github.io/TANDEM/](https://bibi2424.github.io/TANDEM/)** (from [`tools/configurator/`](tools/configurator/index.html)) for live stick inspection, axis calibration, deadzones, and response curves in Chrome/Edge.
-
-- **Power-Path Safety:** Target dual-stick hardware pairs native USB with a proper LiPo/Li-ion charging and power-path protection circuit (never wiring battery voltage directly to 5V VBUS).
+| **Config** | WebHID, USB CDC (`WebSerial`), & BLE GATT (`Web Bluetooth`) + NVS persistence | USB / BLE + NVS | `ESP32-S2`, `ESP32-WROOM`, `ESP32-S3` |
 
 ---
 
 ## Repository Structure
 
 ```text
-TANDEM/
+tandem/
 ├── .github/workflows/ci.yml           # GitHub Actions CI (format, native tests, firmware builds)
 ├── .github/workflows/pages.yml        # GitHub Pages deployment for tools/configurator/
 ├── .github/workflows/release.yml      # Tagged SemVer release builds (merged 0x0 binaries + checksums)
@@ -42,9 +42,10 @@ TANDEM/
 ├── docs/requirements.md               # Baseline hardware, firmware, and verification requirements
 ├── include/boards/                    # Per-board capability flags and ADC1/GPIO pinmaps
 ├── lib/tandem_core/                   # Pure, dependency-free C++17 core library (host-testable)
-├── src/apps/                          # Standalone firmware apps selected via build_src_filter
-├── tools/configurator/                # Zero-build WebHID/WebSerial/Web Bluetooth app (GitHub Pages)
-├── test/                              # Native host Unity unit tests (core, axis shaping, input pipeline)
+├── lib/tandem_hal/                    # Board/MCU-isolated ADC1, GPIO, NVS & RTOS transport adapters
+├── src/apps/                          # Firmware apps (stick, base_station) selected via build_src_filter
+├── tools/configurator/                # Zero-build WebHID/WebSerial/Web Bluetooth app (Tandem Configurator)
+├── test/                              # Native host Unity unit tests (core, shaping, codecs, failsafe)
 ├── platformio.ini                     # PlatformIO environments (native, ESP32-WROOM, ESP32-S2, ESP32-S3)
 ├── AGENTS.md                          # Repository development & coding conventions
 └── LICENSE                            # MIT License
@@ -55,9 +56,9 @@ TANDEM/
 ## Getting Started
 
 > [!TIP]
-> **New to T.A.N.D.E.M.?** Start with the **[User Quick-Start Guide](docs/quickstart.md)** for prebuilt `0x0` flashing, board pinouts, `BOOT` button controls, mode switching, and calibration.
+> **New to Tandem Controls?** Start with the **[User Quick-Start Guide](docs/quickstart.md)** for prebuilt `0x0` flashing, board pinouts, `BOOT` button controls, mode switching, and calibration.
 >
-> **Web Configurator:** **[Open Live Configurator (`bibi2424.github.io/TANDEM`)](https://bibi2424.github.io/TANDEM/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (`WebHID` / `WebSerial`)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
+> **Tandem Configurator:** **[Open Live Configurator (`tandem-controls.github.io/tandem`)](https://tandem-controls.github.io/tandem/)** — Zero-install browser tool (Chrome / Edge) for live stick inspection, axis calibration, deadzones, response curves, and flash saving over **USB (`WebHID` / `WebSerial`)** or **BLE (`BLE_CFG` / Web Bluetooth)**.
 > For **BLE**, switch the stick to `BLE_CFG` (`'4'` on serial or `BOOT` long-press) and click **Connect BLE** directly in Chrome/Edge — **do not** pair `TANDEM-CFG-...` in Windows Bluetooth Settings.
 > Testing local edits? Run `python tools/configurator/serve.py` and open `http://localhost:8000/`.
 
@@ -86,7 +87,7 @@ pio run -e esp32_s3_base_station
 pio run -e esp32_s2_stick -t upload
 pio device monitor -b 115200   # add -p <PORT> if multiple boards are connected
 
-# Serve the Web Configurator locally for Chrome/Edge testing (WebSerial & Web Bluetooth)
+# Serve Tandem Configurator locally for Chrome/Edge testing (WebSerial & Web Bluetooth)
 python tools/configurator/serve.py
 ```
 
@@ -121,6 +122,18 @@ To get accurate C++ IntelliSense in editors using `clangd`:
 
 ---
 
+## Inspiration & Related Projects
+
+Tandem Controls builds on ideas proven across open-source controller and input tooling:
+
+- **[FreeJoy](https://github.com/FreeJoy-Team/FreeJoy)** — Deep STM32 flight-controller configurability, Hall/pot axis calibration, and custom flight-rig ergonomics.
+- **[GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE)** — Clean multi-platform controller firmware structure and accessible browser-based configuration workflows.
+- **[HID Remapper](https://github.com/jfedor2/hid-remapper)** — Portable expression/remapping concepts and WebHID-first zero-install configuration.
+- **[ZMK](https://zmk.dev/) / [VIA](https://www.caniusevia.com/)** — Wireless-first input ergonomics, power-tier discipline, and instant live-tuning UI responsiveness.
+- **[Joypad OS](https://github.com/joypad-ai/joypad-os)** — Web-configurator UX inspiration adapted for high-resolution multi-axis simulation diagnostics.
+
+---
+
 ## Documentation & Roadmap
 
 - [User Quick-Start Guide](docs/quickstart.md)
@@ -128,7 +141,7 @@ To get accurate C++ IntelliSense in editors using `clangd`:
 - [Technical Requirements](docs/requirements.md)
 - [C++ Coding Standard](docs/coding_standard.md)
 - [Development & Agent Guidelines](AGENTS.md)
-- [Issue Tracker & Feature Roadmap](https://github.com/Bibi2424/TANDEM/issues)
+- [Issue Tracker & Feature Roadmap](https://github.com/tandem-controls/tandem/issues)
 
 ---
 

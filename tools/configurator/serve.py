@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local development HTTP server for the T.A.N.D.E.M. Web Configurator.
+"""Local development HTTP server for Tandem Configurator.
 
 Serves tools/configurator/ on http://localhost:<port> (a secure context for
 WebSerial and Web Bluetooth in Chrome/Edge) without requiring any build step.
@@ -31,7 +31,7 @@ def main() -> None:
 
     with ReusableTCPServer(("127.0.0.1", args.port), handler) as httpd:
         url = f"http://localhost:{args.port}/"
-        print(f"Serving T.A.N.D.E.M. Configurator from {web_dir}")
+        print(f"Serving Tandem Configurator from {web_dir}")
         print(f"Open in Chrome/Edge: {url}")
         print("Press Ctrl+C to stop.")
         try:
